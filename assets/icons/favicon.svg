@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#8A6A16"/><stop offset="0.45" stop-color="#F2E2B6"/><stop offset="1" stop-color="#C9A227"/>
+</linearGradient></defs>
+<rect width="64" height="64" rx="14" fill="#2A0713"/>
+<g fill="none" stroke="url(#g)" stroke-width="2">
+<circle cx="32" cy="32" r="21"/><circle cx="32" cy="32" r="12" stroke-width="1.2"/>
+<ellipse cx="48.5" cy="32.0" rx="5" ry="2.2" transform="rotate(0 48.5 32.0)"/><ellipse cx="43.7" cy="43.7" rx="5" ry="2.2" transform="rotate(45 43.7 43.7)"/><ellipse cx="32.0" cy="48.5" rx="5" ry="2.2" transform="rotate(90 32.0 48.5)"/><ellipse cx="20.3" cy="43.7" rx="5" ry="2.2" transform="rotate(135 20.3 43.7)"/><ellipse cx="15.5" cy="32.0" rx="5" ry="2.2" transform="rotate(180 15.5 32.0)"/><ellipse cx="20.3" cy="20.3" rx="5" ry="2.2" transform="rotate(225 20.3 20.3)"/><ellipse cx="32.0" cy="15.5" rx="5" ry="2.2" transform="rotate(270 32.0 15.5)"/><ellipse cx="43.7" cy="20.3" rx="5" ry="2.2" transform="rotate(315 43.7 20.3)"/>
+</g><circle cx="32" cy="32" r="4" fill="#F2E2B6"/></svg>

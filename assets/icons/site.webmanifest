@@ -1,0 +1,14 @@
+{
+  "name": "Ravi Pandey Weds Shristi Pandey",
+  "short_name": "Ravi & Shristi",
+  "description": "Join us in celebrating the wedding of Ravi Pandey and Shristi Pandey.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#2A0713",
+  "theme_color": "#2A0713",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
