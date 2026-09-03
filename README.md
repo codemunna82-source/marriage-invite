@@ -184,8 +184,13 @@ Framework preset **Other**, build command empty, output directory `.`.
 `vercel.json` already sets sensible security headers and caches `assets/` for a
 year while keeping `index.html`, `style.css` and `script.js` always fresh.
 
-After the first deploy, update `canonical` and `og:url` in `index.html` to your
-live URL so link previews resolve correctly.
+The live deployment is https://marriage-invite-blond.vercel.app — `canonical`
+and `og:url` in `index.html` already point at it. If you attach a custom domain
+later, update those two tags to match.
+
+Note that Vercel Authentication (deployment protection) must stay **off** for a
+public invitation, otherwise guests are asked to log in to Vercel before they
+can open the link: *Project → Settings → Deployment Protection*.
 
 ---
 
