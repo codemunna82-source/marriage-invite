@@ -11,16 +11,19 @@ wedding.mp3     "Wedding Invitation" by Sahil Madan, from Pixabay.
                 31.3s stereo loop that joins invisibly, lifted 1.75x in level
                 with no clipping. 128 kbps, 489 KB.
 
-invocation.mp3  A shankh written for this invitation - the conch blown once,
-                with temple bells and manjira. Played a single time as the
-                doors open under || Shri Ganeshaya Namah ||, never repeated.
+invocation.mp3  A shankh - the conch blown once, with temple bells and
+                manjira, timed to the doors opening. OFF by default: only the
+                track above plays. To bring it back, set in script.js:
+                    invocation: "assets/music/invocation.mp3"
                 Synthesised, so nothing is licensed.
 
 Replacing them
 --------------
-Drop your own file in as wedding.mp3, or point weddingData.music in script.js
-at a different name (.mp3, .m4a and .ogg all work). Set
-weddingData.invocation to "" to skip the conch.
+Drop your own file in as wedding.mp3 AND bump the ?v= number on
+weddingData.music in script.js (e.g. wedding.mp3?v=3). Without a new address,
+anyone who already opened the invitation keeps hearing the old track from
+their browser cache. Or point weddingData.music at a different filename
+(.mp3, .m4a and .ogg all work).
 
 Keep the loop under a couple of megabytes so the invitation stays quick on
 mobile data. If your track does not end where it begins, crossfade its tail

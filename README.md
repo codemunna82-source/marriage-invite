@@ -125,11 +125,11 @@ looping it raw would tick once a minute. It has been prepared here: the last
 second loop that joins invisibly**, and the level is lifted 1.75× to a 0.83
 peak with no clipping. Stereo, 128 kbps, 489 KB.
 
-`assets/music/invocation.mp3` is a **shankh** written for this invitation —
-the conch blown once, with temple bells and a run of manjira — played a single
-time, timed to the doors opening under *|| श्री गणेशाय नमः ||*. It never
-repeats, not even when the ♪ button is toggled off and back on. It is
-synthesised from oscillators and envelopes, so nothing is licensed.
+`assets/music/invocation.mp3` is a **shankh** — the conch blown once, with
+temple bells and a run of manjira, timed to the doors opening under
+*|| श्री गणेशाय नमः ||*. It is **off by default**: only your track plays. The
+file is still there, so to bring it back set
+`weddingData.invocation = "assets/music/invocation.mp3"`.
 
 **Music is on by default.** It never autoplays cold — it starts the moment the
 visitor taps **ENTER WEDDING**, which is the user gesture mobile browsers
@@ -143,8 +143,13 @@ that is unavailable (or the page is opened straight off the filesystem) it
 falls back to the plain `<audio>` element. If a file is missing the button
 simply stays on *OFF* and nothing breaks.
 
-**To swap the track:** drop your file in as `assets/music/wedding.mp3`, or
-point `weddingData.music` at a different name. Set `weddingData.invocation`
+**To swap the track:** drop your file in as `assets/music/wedding.mp3` and
+**bump the `?v=` number** on `weddingData.music` (`…wedding.mp3?v=3`), or point
+it at a different name. The version matters: browsers hold on to audio hard,
+and without a new address a guest who has already opened the invitation keeps
+hearing the old track. `vercel.json` now also serves `/assets/music/` with
+`must-revalidate` rather than the year-long immutable cache the other assets
+get, so the server is always asked. Set `weddingData.invocation`
 to `""` to skip the conch. Keep the loop under a couple of megabytes so the
 invitation stays quick on mobile data — and if the new track does not loop
 cleanly, it is worth crossfading its tail over its head the same way.

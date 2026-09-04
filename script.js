@@ -42,9 +42,16 @@ const weddingData = {
   /* --- Music ---
      wedding.mp3: "Wedding Invitation" by Sahil Madan, from Pixabay
      (Pixabay Content License — free to use, attribution not required).
-     Prepared here as a seamless 31s stereo loop. */
-  music: "assets/music/wedding.mp3",
-  invocation: "assets/music/invocation.mp3",   // shankh + bells, played once as the doors open
+     Prepared here as a seamless 31s stereo loop.
+
+     Bump the ?v= number whenever you replace the file. Browsers hold on to
+     audio hard, and without a new address a guest who has already opened the
+     invitation keeps hearing the old track. */
+  music: "assets/music/wedding.mp3?v=2",
+
+  /* A shankh (conch) sounded once as the doors open. Off by default; set it to
+     "assets/music/invocation.mp3" to bring it back. */
+  invocation: "",
 
   /* --- Story --- */
   storyQuote: "Two hearts, one beautiful journey, and a lifetime of memories waiting to be created.",
