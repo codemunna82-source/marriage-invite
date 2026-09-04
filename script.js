@@ -55,6 +55,36 @@ const weddingData = {
 
   footerNote: "Made with love, for the people who mean the most to us.",
 
+  /* --- Save the date card (the back of the card) --- */
+  saveTheDateNote: "No cards, no formalities \u2014 just the people we love, under one roof, for the days that matter most.",
+
+  /* --- Dress code: one entry per celebration --- */
+  dressCode: [
+    { event: "Haldi", note: "Yellows and marigold", colors: ["#F4C430", "#E8A33D", "#FFF0B8"] },
+    { event: "Mehendi", note: "Fresh greens and ivory", colors: ["#2F6B4F", "#8FBF7A", "#F3EAD6"] },
+    { event: "Sangeet", note: "Jewel tones, dance-ready", colors: ["#5B2A86", "#B3237A", "#1F5C8B"] },
+    { event: "Wedding", note: "Traditional reds and gold", colors: ["#8C1C2F", "#C9A227", "#F2E2B6"] },
+    { event: "Reception", note: "Midnight and champagne", colors: ["#1B2440", "#6E7BA8", "#EBD9B4"] }
+  ],
+
+  /* --- Blessings shown in the 3D carousel --- */
+  blessings: [
+    "May your days be long and your laughter louder still.",
+    "Two families, one bond, and a lifetime of festivals ahead.",
+    "May you always be each other's calm and each other's celebration.",
+    "Seven vows, seven lifetimes, one promise kept every single day.",
+    "May your home be filled with light, sweets and unexpected guests.",
+    "Grow old together, and stay young in the way you love."
+  ],
+
+  /* --- Travel & stay --- */
+  travel: [
+    { title: "By Air", body: "[EDIT] Nearest airport and roughly how long the drive takes." },
+    { title: "By Train", body: "[EDIT] Nearest railway station and how to reach the venue." },
+    { title: "By Road", body: "[EDIT] Directions, landmarks and where to park." },
+    { title: "Where to Stay", body: "[EDIT] Hotels we have blocked rooms at, and who to call." }
+  ],
+
   /* --- Events --- */
   events: {
     haldi: {
@@ -190,6 +220,29 @@ function bindContent() {
       </button>`).join("");
   }
 
+  /* Dress code */
+  const dress = $("#dress-grid");
+  if (dress) {
+    dress.innerHTML = weddingData.dressCode.map((d) => `
+      <li class="dress-card tilt reveal">
+        <span class="dress-card__swatches" aria-hidden="true">
+          ${d.colors.map((c, i) => `<i style="background:${c}; --i:${i}"></i>`).join("")}
+        </span>
+        <h3 class="dress-card__event">${d.event}</h3>
+        <p class="dress-card__note">${d.note}</p>
+      </li>`).join("");
+  }
+
+  /* Travel & stay */
+  const travel = $("#travel-grid");
+  if (travel) {
+    travel.innerHTML = weddingData.travel.map((t) => `
+      <li class="travel-card tilt reveal">
+        <h3 class="travel-card__title">${t.title}</h3>
+        <p class="travel-card__body">${t.body}</p>
+      </li>`).join("");
+  }
+
   /* Venue link */
   const maps = $("#maps-btn");
   if (maps) maps.href = weddingData.googleMapsUrl;
@@ -217,6 +270,16 @@ function initCountdown() {
   const pad = (n) => String(Math.max(0, n)).padStart(2, "0");
   let timer;
 
+  /* each digit turns over on its own axis as it changes */
+  const put = (el, value) => {
+    if (!el || el.textContent === value) return;
+    el.textContent = value;
+    if (!env.gsap || env.reduced) return;
+    gsap.fromTo(el,
+      { rotationX: -78, y: -6, opacity: 0.35 },
+      { rotationX: 0, y: 0, opacity: 1, duration: 0.55, ease: "power3.out", transformPerspective: 600 });
+  };
+
   const tick = () => {
     const diff = target - Date.now();
     if (diff <= 0) {
@@ -226,10 +289,10 @@ function initCountdown() {
       return;
     }
     const s = Math.floor(diff / 1000);
-    out.days.textContent  = pad(Math.floor(s / 86400));
-    out.hours.textContent = pad(Math.floor((s % 86400) / 3600));
-    out.mins.textContent  = pad(Math.floor((s % 3600) / 60));
-    out.secs.textContent  = pad(s % 60);
+    put(out.days,  pad(Math.floor(s / 86400)));
+    put(out.hours, pad(Math.floor((s % 86400) / 3600)));
+    put(out.mins,  pad(Math.floor((s % 3600) / 60)));
+    put(out.secs,  pad(s % 60));
   };
 
   tick();
@@ -358,66 +421,264 @@ function initRsvp() {
    ------------------------------------------------------------ */
 const Music = (() => {
   const KEY = "wedding-music-pref";
-  let audio, btn, label, wanted = true;
+  const VOL = 0.42;
+
+  let audio, btn, label;
+  let ac = null, gain = null, src = null;
+  let wanted = true, on = false, loading = false;
 
   const store = (v) => { try { localStorage.setItem(KEY, v ? "on" : "off"); } catch (e) { /* private mode */ } };
   const read = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
 
-  const paint = (on) => {
+  const paint = (v) => {
+    on = v;
     if (!btn) return;
-    btn.setAttribute("aria-pressed", String(on));
-    label.textContent = on ? "ON" : "OFF";
+    btn.setAttribute("aria-pressed", String(v));
+    btn.classList.toggle("is-on", v);
+    label.textContent = v ? "ON" : "OFF";
   };
 
-  const play = () => {
-    if (!audio) return;
-    const p = audio.play();
-    if (p && p.catch) p.catch(() => paint(false));
+  const ramp = (to, secs) => {
+    if (!gain) return;
+    const t = ac.currentTime;
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(gain.gain.value, t);
+    gain.gain.linearRampToValueAtTime(to, t + secs);
   };
+
+  /* Web Audio loops the track with no gap at the seam; the <audio> element cannot */
+  async function playWebAudio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    if (!ac) ac = new AC();
+    if (ac.state === "suspended") await ac.resume();
+
+    if (!src) {
+      if (loading) return true;
+      loading = true;
+      const res = await fetch(weddingData.music);
+      if (!res.ok) { loading = false; throw new Error("track missing"); }
+      const buf = await ac.decodeAudioData(await res.arrayBuffer());
+      gain = ac.createGain();
+      gain.gain.value = 0;
+      gain.connect(ac.destination);
+      src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(gain);
+      src.start(0);
+      loading = false;
+    }
+    ramp(VOL, 2.4);
+    return true;
+  }
+
+  /* fallback: the plain audio element (also covers file:// where fetch is blocked) */
+  function playElement() {
+    if (!audio) return Promise.reject();
+    audio.volume = 0;
+    const p = audio.play();
+    return (p && p.then ? p : Promise.resolve()).then(() => {
+      if (env.gsap) gsap.to(audio, { volume: VOL, duration: 2.4 });
+      else audio.volume = VOL;
+    });
+  }
+
+  async function play() {
+    try {
+      if (await playWebAudio()) { paint(true); return; }
+      throw new Error("no web audio");
+    } catch (e) {
+      try { await playElement(); paint(true); }
+      catch (err) { paint(false); }          /* no file yet, or the browser refused */
+    }
+  }
+
+  function pause() {
+    if (src && ac) {
+      ramp(0, 0.6);
+      setTimeout(() => { if (!on && ac && ac.state === "running") ac.suspend(); }, 700);
+    }
+    if (audio && !audio.paused) {
+      if (env.gsap) gsap.to(audio, { volume: 0, duration: 0.6, onComplete: () => audio.pause() });
+      else audio.pause();
+    }
+    paint(false);
+  }
 
   return {
     init() {
       audio = $("#bg-music");
       btn = $("#music-btn");
-      if (!audio || !btn) return;
+      if (!btn) return;
       label = $(".music-btn__text", btn);
-      audio.volume = 0;
-      wanted = read() !== "off";
+      wanted = read() !== "off";        /* music is on unless this guest turned it off */
       paint(false);
 
       btn.addEventListener("click", () => {
-        if (audio.paused) {
-          wanted = true; store(true); play(); paint(true);
-          if (env.gsap) gsap.to(audio, { volume: 0.45, duration: 1.2 });
-          else audio.volume = 0.45;
-        } else {
-          wanted = false; store(false);
-          if (env.gsap) gsap.to(audio, { volume: 0, duration: 0.6, onComplete: () => audio.pause() });
-          else audio.pause();
-          paint(false);
-        }
+        if (on) { wanted = false; store(false); pause(); }
+        else { wanted = true; store(true); play(); }
       });
 
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden && !audio.paused) audio.pause();
-        else if (!document.hidden && wanted && audio.paused && document.body.classList.contains("is-entered")) play();
+        if (document.hidden) {
+          if (ac && ac.state === "running") ac.suspend();
+          if (audio && !audio.paused) audio.pause();
+        } else if (on && wanted) {
+          if (ac && ac.state === "suspended") ac.resume();
+          else if (audio && audio.paused && audio.currentTime) audio.play().catch(() => {});
+        }
       });
     },
 
-    /* called from the ENTER WEDDING gesture, so autoplay policy is satisfied */
+    /* called from the ENTER WEDDING gesture, which is what unlocks audio on mobile */
     start() {
-      if (!audio || !btn) return;
+      if (!btn) return;
       btn.hidden = false;
-      if (!wanted) return;
-      play();
-      audio.addEventListener("playing", () => {
-        paint(true);
-        if (env.gsap) gsap.to(audio, { volume: 0.45, duration: 2.4 });
-        else audio.volume = 0.45;
-      }, { once: true });
+      if (wanted) play();
     }
   };
 })();
+
+/* ------------------------------------------------------------
+   7b. 3D CARD TILT — pointer-tracked perspective with a moving glare
+   ------------------------------------------------------------ */
+function initTilt() {
+  if (env.mobile || env.reduced) return;
+  $$(".tilt, .event-card, .venue-card, .count-card").forEach((el) => {
+    let raf = 0, tx = 0, ty = 0;
+    const apply = () => {
+      raf = 0;
+      el.style.transform = `perspective(900px) rotateX(${ty}deg) rotateY(${tx}deg) translateZ(14px)`;
+    };
+    el.addEventListener("pointermove", (e) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+      tx = (px - 0.5) * 13;
+      ty = (py - 0.5) * -11;
+      el.style.setProperty("--gx", `${(px * 100).toFixed(1)}%`);
+      el.style.setProperty("--gy", `${(py * 100).toFixed(1)}%`);
+      el.classList.add("is-tilting");
+      if (!raf) raf = requestAnimationFrame(apply);
+    });
+    el.addEventListener("pointerleave", () => {
+      el.classList.remove("is-tilting");
+      el.style.transform = "";
+    });
+  });
+}
+
+/* ------------------------------------------------------------
+   7c. SAVE-THE-DATE CARD — a real 3D flip
+   ------------------------------------------------------------ */
+function initFlipCard() {
+  const card = $("#flip-card");
+  if (!card) return;
+  let flipped = false;
+  const set = (v) => {
+    flipped = v;
+    card.classList.toggle("is-flipped", v);
+    card.setAttribute("aria-pressed", String(v));
+  };
+  card.addEventListener("click", () => set(!flipped));
+
+  /* a first, unprompted turn as it scrolls into view, so the 3D is discovered */
+  if (env.gsap && typeof ScrollTrigger !== "undefined" && !env.reduced) {
+    ScrollTrigger.create({
+      trigger: card, start: "top 72%", once: true,
+      onEnter: () => { setTimeout(() => set(true), 700); setTimeout(() => set(false), 3000); }
+    });
+  }
+}
+
+/* ------------------------------------------------------------
+   7d. BLESSINGS — a 3D carousel on a rotating cylinder
+   ------------------------------------------------------------ */
+function initCarousel() {
+  const ring = $("#bless-ring");
+  const dots = $("#bless-dots");
+  if (!ring) return;
+
+  const items = weddingData.blessings;
+  const n = items.length;
+  const step = 360 / n;
+  let radius = 300;
+  let index = 0, timer = 0;
+  ring.innerHTML = items.map((text, i) => `
+    <li class="carousel__cell" style="--angle:${i * step}deg" ${i ? 'aria-hidden="true"' : ""}>
+      <span class="carousel__mark" aria-hidden="true">&#10047;</span>
+      <p class="carousel__text">${text}</p>
+    </li>`).join("");
+
+  dots.innerHTML = items.map((_, i) => `
+    <button class="carousel__dot${i ? "" : " is-active"}" type="button" role="tab"
+      aria-selected="${i === 0}" aria-label="Blessing ${i + 1} of ${n}" data-i="${i}"></button>`).join("");
+
+  const cells = $$(".carousel__cell", ring);
+  const dotEls = $$(".carousel__dot", dots);
+
+  /* the cylinder has to be wide enough that neighbouring cards clear each other */
+  const size = () => {
+    const w = cells[0].getBoundingClientRect().width || 300;
+    radius = Math.round((w / 2) / Math.tan(Math.PI / n)) + 44;
+    ring.style.setProperty("--radius", `${radius}px`);
+    if (env.gsap) gsap.set(ring, { transformPerspective: 1400, z: -radius });
+    else ring.style.transform = `translateZ(-${radius}px) rotateY(${-index * step}deg)`;
+  };
+
+  const go = (i) => {
+    index = ((i % n) + n) % n;
+    const rot = -index * step;
+    if (env.gsap) gsap.to(ring, { rotationY: rot, duration: env.reduced ? 0.2 : 0.9, ease: "power3.out" });
+    else ring.style.transform = `translateZ(-${radius}px) rotateY(${rot}deg)`;
+    cells.forEach((c, k) => {
+      c.classList.toggle("is-active", k === index);
+      if (k === index) c.removeAttribute("aria-hidden"); else c.setAttribute("aria-hidden", "true");
+    });
+    dotEls.forEach((d, k) => {
+      d.classList.toggle("is-active", k === index);
+      d.setAttribute("aria-selected", String(k === index));
+    });
+  };
+
+  size();
+  go(0);
+
+  let rt;
+  window.addEventListener("resize", () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => { size(); go(index); }, 160);
+  });
+
+  const restart = () => {
+    clearInterval(timer);
+    if (!env.reduced) timer = setInterval(() => go(index + 1), 6500);
+  };
+  restart();
+
+  $("#bless-next").addEventListener("click", () => { go(index + 1); restart(); });
+  $("#bless-prev").addEventListener("click", () => { go(index - 1); restart(); });
+  dotEls.forEach((d) => d.addEventListener("click", () => { go(Number(d.dataset.i)); restart(); }));
+
+  const stage = $(".carousel__stage");
+  stage.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") { go(index + 1); restart(); }
+    else if (e.key === "ArrowLeft") { go(index - 1); restart(); }
+  });
+
+  let sx = null;
+  stage.addEventListener("touchstart", (e) => { sx = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener("touchend", (e) => {
+    if (sx === null) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    if (Math.abs(dx) > 42) { go(index + (dx < 0 ? 1 : -1)); restart(); }
+    sx = null;
+  }, { passive: true });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearInterval(timer); else restart();
+  });
+}
 
 /* ------------------------------------------------------------
    8. THREE.JS SCENE — royal palace doors, dust, petals
@@ -427,6 +688,7 @@ const Scene3D = (() => {
   let doorGroup, leftPivot, rightPivot, leftHandle, rightHandle;
   let gapGlow, hallGlow, rays = [];
   let dust, petals, bokeh, floor;
+  let sanctum, mandalas = [], diyas = [], garland;
   let petalState = null, dustState = null;
   const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
   let running = false, entered = false;
@@ -865,6 +1127,129 @@ const Scene3D = (() => {
     scene.add(petals);
   }
 
+  /* ---- the world you scroll through, built once the doors are behind you ---- */
+  function buildSanctum() {
+    sanctum = new THREE.Group();
+
+    /* these ornaments sit far from any lamp, so they carry their own glow */
+    const ornament = new THREE.MeshStandardMaterial({
+      color: 0xC9A227, emissive: 0x6E5310, emissiveIntensity: 0.3,
+      metalness: 0.5, roughness: 0.45
+    });
+    const marigold = new THREE.MeshStandardMaterial({
+      color: 0xC07C1C, emissive: 0x4A2704, emissiveIntensity: 0.26, roughness: 0.9
+    });
+    const leafMat = new THREE.MeshStandardMaterial({
+      color: 0x7A1428, emissive: 0x2A050C, emissiveIntensity: 0.24, roughness: 0.92
+    });
+    const glowTex = glowSprite();
+
+    /* everything is placed relative to where the camera came to rest */
+    const camZ = camera.position.z;
+    const camY = camera.userData.baseY;
+    const half = (d) => Math.tan((camera.fov * Math.PI / 180) / 2) * d;
+    const halfW = (d) => half(d) * Math.max(camera.aspect, 0.55);
+
+    /* a column of mandalas: you drift past them as the page scrolls */
+    const petalGeo = new THREE.TorusGeometry(0.3, 0.024, 6, 16);
+    const beadGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const spokes = env.mobile ? 14 : 22;
+
+    const makeMandala = (scale) => {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.TorusGeometry(3.7, 0.05, 8, 90), ornament));
+      g.add(new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.03, 8, 70), ornament));
+      for (let i = 0; i < spokes; i++) {
+        const a = (i / spokes) * Math.PI * 2;
+        const petal = new THREE.Mesh(petalGeo, ornament);
+        petal.position.set(Math.cos(a) * 3.16, Math.sin(a) * 3.16, 0);
+        petal.rotation.z = a;
+        petal.scale.set(1, 0.44, 1);
+        g.add(petal);
+        const bead = new THREE.Mesh(beadGeo, ornament);
+        bead.position.set(Math.cos(a) * 4.05, Math.sin(a) * 4.05, 0);
+        g.add(bead);
+      }
+      g.scale.setScalar(scale);
+      return g;
+    };
+
+    [[0, -15.5, 1, 1], [1, -17.5, 0.78, -1], [2, -13.5, 0.62, 1]].forEach(([k, z, scale, dir], i) => {
+      const m = makeMandala(scale);
+      m.position.set(i === 1 ? -2.4 : (i === 2 ? 2.8 : 0), camY + 0.4 + k * 9.5, z);
+      m.userData = { dir, speed: 0.03 + i * 0.012 };
+      mandalas.push(m);
+      sanctum.add(m);
+    });
+
+    const halo = new THREE.Mesh(
+      new THREE.PlaneGeometry(11, 11),
+      new THREE.MeshBasicMaterial({ map: glowTex, color: 0xFFB765, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    halo.position.set(0, camY + 0.4, camZ - 17);
+    sanctum.add(halo);
+
+    /* a marigold garland strung across the top of the view */
+    garland = new THREE.Group();
+    const flowerGeo = new THREE.SphereGeometry(0.14, 7, 7);
+    const gz = camZ - 4.4;
+    const span = halfW(4.4) * 2.6;
+    const beads = env.mobile ? 24 : 38;
+    for (let i = 0; i <= beads; i++) {
+      const t = i / beads;
+      const m = new THREE.Mesh(flowerGeo, i % 4 === 3 ? leafMat : marigold);
+      m.position.set((t - 0.5) * span, -Math.sin(t * Math.PI) * 0.9, 0);
+      m.scale.setScalar(0.66 + Math.sin(i * 2.3) * 0.2);
+      garland.add(m);
+    }
+    garland.position.set(0, camY + half(4.4) * 0.96, gz);
+    garland.userData.baseY = garland.position.y;
+    sanctum.add(garland);
+
+    /* floating diyas, each carrying its own little halo */
+    const bowlGeo = new THREE.CylinderGeometry(0.2, 0.09, 0.13, 12);
+    const flameGeo = new THREE.SphereGeometry(0.065, 8, 8);
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0xFFD79A });
+    const count = env.reduced ? 3 : (env.mobile ? 4 : 7);
+    for (let i = 0; i < count; i++) {
+      const d = new THREE.Group();
+      const dist = 5 + Math.random() * 6;
+      const bowl = new THREE.Mesh(bowlGeo, ornament);
+      const flame = new THREE.Mesh(flameGeo, flameMat);
+      flame.position.y = 0.13;
+      flame.scale.set(0.8, 1.9, 0.8);
+      const h = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.4, 1.4),
+        new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, opacity: 0.34, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      h.position.y = 0.15;
+      d.add(bowl, flame, h);
+      d.scale.setScalar(0.62);
+      d.position.set(
+        (Math.random() - 0.5) * halfW(dist) * 1.9,
+        camY + (Math.random() - 0.5) * half(dist) * 2,
+        camZ - dist
+      );
+      d.userData = {
+        phase: Math.random() * 6.28,
+        drift: 0.1 + Math.random() * 0.2,
+        sway: 0.3 + Math.random() * 0.5,
+        top: camY + half(dist) * 1.15,
+        bottom: camY - half(dist) * 1.15,
+        spanX: halfW(dist) * 1.9
+      };
+      diyas.push(d);
+      sanctum.add(d);
+    }
+
+    /* a warm lamp so the ornaments are never flat */
+    const glowLight = new THREE.PointLight(0xFFC98A, 0.8, 26, 2);
+    glowLight.position.set(0, camY + 1, camZ - 5);
+    sanctum.add(glowLight);
+
+    scene.add(sanctum);
+  }
+
   /* ---- animation loop ---- */
   function tick() {
     raf = requestAnimationFrame(tick);
@@ -881,7 +1266,8 @@ const Scene3D = (() => {
       pointer.y += (pointer.ty - pointer.y) * 0.045;
       camera.position.x = camera.userData.baseX + pointer.x * 0.4;
       camera.position.y = camera.userData.baseY + pointer.y * 0.22 - scrollY * 0.7;
-      camera.lookAt(pointer.x * 0.18, camera.userData.baseY + pointer.y * 0.1, entered ? -3 : 0);
+      camera.lookAt(pointer.x * 0.18, camera.userData.baseY + pointer.y * 0.1,
+        entered ? camera.position.z - 8 : 0);
     }
 
     if (dustState && dust.material.opacity > 0.001) {
@@ -908,6 +1294,26 @@ const Scene3D = (() => {
       }
       petals.geometry.attributes.position.needsUpdate = true;
       petals.geometry.attributes.aAngle.needsUpdate = true;
+    }
+
+    if (sanctum) {
+      sanctum.position.y = scrollY * 8.4;
+      mandalas.forEach((m) => {
+        m.rotation.z = (t * m.userData.speed + scrollY * 1.5) * m.userData.dir;
+        m.rotation.x = Math.sin(t * 0.16) * 0.05;
+      });
+      garland.position.y = garland.userData.baseY + Math.sin(t * 0.3) * 0.14;
+      garland.rotation.z = Math.sin(t * 0.22) * 0.012;
+      diyas.forEach((d) => {
+        const u = d.userData;
+        d.position.y += u.drift * dt * 0.28;
+        d.position.x += Math.sin(t * 0.4 + u.phase) * dt * u.sway * 0.5;
+        d.rotation.y = t * 0.2 + u.phase;
+        if (d.position.y > u.top) {
+          d.position.y = u.bottom;
+          d.position.x = (Math.random() - 0.5) * u.spanX;
+        }
+      });
     }
 
     if (bokeh) bokeh.rotation.y = t * 0.012;
@@ -1051,6 +1457,7 @@ const Scene3D = (() => {
       if (hallGlow) { scene.remove(hallGlow); hallGlow.geometry.dispose(); hallGlow.material.dispose(); hallGlow = null; }
       camera.userData.baseY = 1.6;
       camera.userData.baseX = 0;
+      buildSanctum();
       /* dial the effects back: atmosphere, not confetti */
       if (env.gsap) {
         gsap.to(petals.material.uniforms.uOpacity, { value: 0.4, duration: 2.2 });
@@ -1230,8 +1637,14 @@ const Reveal = (() => {
       window.addEventListener("scroll", onScroll, { passive: true });
       onScroll();
 
-      if (!env.gsap || typeof ScrollTrigger === "undefined") return;
-      gsap.registerPlugin(ScrollTrigger);
+      const hasST = env.gsap && typeof ScrollTrigger !== "undefined";
+      if (hasST) gsap.registerPlugin(ScrollTrigger);
+
+      initTilt();
+      initCarousel();
+      initFlipCard();
+
+      if (!hasST) return;
 
       const dist = env.reduced ? 12 : 44;
       const dur = env.reduced ? 0.4 : 0.95;

@@ -199,6 +199,45 @@
     <ul class="events" id="events-grid"></ul>
   </section>
 
+
+  <!-- ---------- SAVE THE DATE (3D flip card) ---------- -->
+  <section id="save-the-date" class="section section--std" aria-labelledby="std-heading">
+    <div class="section__head">
+      <p class="kicker reveal">Mark your calendar</p>
+      <h2 id="std-heading" class="section__title reveal">Save the Date</h2>
+      <div class="ornament reveal" aria-hidden="true"></div>
+    </div>
+
+    <div class="flip reveal">
+      <button class="flip__card" id="flip-card" type="button" aria-pressed="false"
+              aria-label="Turn the save-the-date card over">
+        <span class="flip__face flip__face--front">
+          <span class="flip__corner" aria-hidden="true"></span>
+          <span class="flip__label">The wedding of</span>
+          <span class="flip__names"><span data-wd="groomFirst"></span> &amp; <span data-wd="brideFirst"></span></span>
+          <span class="flip__date" data-wd="date"></span>
+          <span class="flip__hint">Tap to turn</span>
+        </span>
+        <span class="flip__face flip__face--back">
+          <span class="flip__corner" aria-hidden="true"></span>
+          <span class="flip__quote" data-wd="saveTheDateNote"></span>
+          <span class="flip__meta"><span data-wd="venue"></span><i aria-hidden="true">&#10022;</i><span data-wd="city"></span></span>
+          <span class="flip__hint">Tap to turn back</span>
+        </span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ---------- DRESS CODE ---------- -->
+  <section id="dress-code" class="section section--dress" aria-labelledby="dress-heading">
+    <div class="section__head">
+      <p class="kicker reveal">Come dressed for the occasion</p>
+      <h2 id="dress-heading" class="section__title reveal">Colours of the Celebration</h2>
+      <div class="ornament reveal" aria-hidden="true"></div>
+    </div>
+    <ul class="dress" id="dress-grid"></ul>
+  </section>
+
   <!-- ---------- FAMILY ---------- -->
   <section id="family" class="section section--family" aria-labelledby="family-heading">
     <div class="section__head">
@@ -237,6 +276,25 @@
     <div class="gallery" id="gallery-grid"></div>
   </section>
 
+
+  <!-- ---------- BLESSINGS (3D carousel) ---------- -->
+  <section id="blessings" class="section section--blessings" aria-labelledby="blessings-heading">
+    <div class="section__head">
+      <p class="kicker reveal">Words we hold close</p>
+      <h2 id="blessings-heading" class="section__title reveal">Blessings</h2>
+      <div class="ornament reveal" aria-hidden="true"></div>
+    </div>
+
+    <div class="carousel reveal">
+      <button class="carousel__nav carousel__nav--prev" id="bless-prev" type="button" aria-label="Previous blessing">&#8249;</button>
+      <div class="carousel__stage">
+        <ul class="carousel__ring" id="bless-ring" aria-live="polite"></ul>
+      </div>
+      <button class="carousel__nav carousel__nav--next" id="bless-next" type="button" aria-label="Next blessing">&#8250;</button>
+    </div>
+    <div class="carousel__dots" id="bless-dots" role="tablist" aria-label="Choose a blessing"></div>
+  </section>
+
   <!-- ---------- VENUE ---------- -->
   <section id="venue" class="section section--venue" aria-labelledby="venue-heading">
     <div class="section__head">
@@ -254,6 +312,17 @@
       </dl>
       <a class="btn btn--gold" id="maps-btn" href="#" target="_blank" rel="noopener noreferrer">View Location</a>
     </div>
+  </section>
+
+
+  <!-- ---------- TRAVEL &amp; STAY ---------- -->
+  <section id="travel" class="section section--travel" aria-labelledby="travel-heading">
+    <div class="section__head">
+      <p class="kicker reveal">Getting to the celebration</p>
+      <h2 id="travel-heading" class="section__title reveal">Travel &amp; Stay</h2>
+      <div class="ornament reveal" aria-hidden="true"></div>
+    </div>
+    <ul class="travel" id="travel-grid"></ul>
   </section>
 
   <!-- ---------- RSVP ---------- -->

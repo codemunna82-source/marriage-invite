@@ -21,7 +21,7 @@ bundler. Three.js and GSAP load from a CDN. Drop it on Vercel and it is live.
 ├── README.md
 └── assets/
     ├── images/         gallery placeholders + og-image.png
-    ├── music/          put wedding.mp3 here
+    ├── music/          wedding.mp3 (an original instrumental, ready to replace)
     └── icons/          favicon, apple touch icon, webmanifest
 ```
 
@@ -67,6 +67,10 @@ const weddingData = {
 | Family names | `groomFamily`, `brideFamily`, and their `…Note` lines |
 | Venue + map button | `venue`, `address`, `city`, `googleMapsUrl` |
 | Where the RSVP goes | `whatsapp` |
+| The save-the-date card's reverse | `saveTheDateNote` |
+| Dress code colours | `dressCode` — one entry per event, with any number of hex colours |
+| Blessings in the 3D carousel | `blessings` — add or remove lines freely |
+| Travel & stay cards | `travel` — title and body per card |
 
 Two things live in `index.html` because search engines and WhatsApp previews
 read them before JavaScript runs: the `<title>`/`<meta>` block and the
@@ -107,18 +111,26 @@ link is shared.
 
 ---
 
-## Replacing the music
+## The music
 
-Save your track as `assets/music/wedding.mp3`, or change `weddingData.music` to
-whatever you name it.
+`assets/music/wedding.mp3` is an original instrumental written for this
+invitation — shehnai and bansuri over a tanpura drone with a soft keherwa on the
+tabla, in raag Bhoop. It is 48 seconds and loops seamlessly. Nothing is
+licensed from anyone, so it is yours to keep, edit or throw away.
 
-The track never autoplays. It starts only after the visitor taps **ENTER
-WEDDING** (a real user gesture, which is what mobile browsers require), and the
-floating **♪** button toggles it at any time. The choice is remembered in
-`localStorage`, so a guest who mutes it stays muted on their next visit. If the
-file is missing the button simply stays on *OFF* — nothing breaks.
+**Music is on by default.** It never autoplays cold — it starts the moment the
+visitor taps **ENTER WEDDING**, which is the user gesture mobile browsers
+require — and the floating **♪** button turns it off and on. The choice is
+remembered in `localStorage`, so a guest who mutes it stays muted next visit.
 
-Use music you have the right to use.
+The track is loaded through the Web Audio API so the loop has no gap at the
+seam; if that is unavailable (or the page is opened straight off the
+filesystem) it falls back to the plain `<audio>` element. If the file is
+missing entirely the button simply stays on *OFF* and nothing breaks.
+
+To use your own: drop it in as `assets/music/wedding.mp3`, or point
+`weddingData.music` at a different name. Keep it under a couple of megabytes,
+and use music you have the right to use.
 
 ---
 
@@ -136,12 +148,25 @@ Use music you have the right to use.
 
 **The invitation**
 - Hero with layered parallax, floral frame and flickering diyas
-- Live countdown with a *Today is the day!* state
-- Five event cards with 3D hover and staggered scroll reveals
-- Our Story, family invitation, masonry gallery with lightbox
-  (arrows, keyboard, swipe, Escape)
-- Venue card with a Google Maps button
+- Live countdown whose digits turn over in 3D as they change
+- Five event cards with pointer-tracked 3D tilt, a moving glare and staggered
+  scroll reveals
+- Our Story and a family invitation
+- A save-the-date card that genuinely flips in 3D — and turns itself over once,
+  unprompted, as it scrolls into view
+- Dress code: a colour palette per celebration, the swatches stacked in depth
+- Masonry gallery with a lightbox (arrows, keyboard, swipe, Escape, focus trap)
+- Blessings on a rotating 3D cylinder — auto-advancing, with arrows, dots,
+  keyboard and swipe
+- Venue card with a Google Maps button, and Travel & Stay cards
 - RSVP that composes a WhatsApp message — no backend, no data collected
+
+**The 3D does not stop at the door**
+Once you are inside, the Three.js scene rebuilds itself into a world you scroll
+through: a marigold garland strung across the top of the view, a column of
+mandalas you drift past as the page moves, diyas floating up through the depth,
+and the dust and petals still falling. The whole layer sits behind the words at
+reduced opacity, so it reads as atmosphere rather than decoration.
 
 **Everything else**
 - One `requestAnimationFrame` loop for the whole site, paused when the tab is hidden
