@@ -39,7 +39,10 @@ const weddingData = {
   /* --- RSVP --- */
   whatsapp: "919999999999", // country code + number, digits only
 
-  /* --- Music --- */
+  /* --- Music ---
+     wedding.mp3: "Wedding Invitation" by Sahil Madan, from Pixabay
+     (Pixabay Content License — free to use, attribution not required).
+     Prepared here as a seamless 31s stereo loop. */
   music: "assets/music/wedding.mp3",
   invocation: "assets/music/invocation.mp3",   // shankh + bells, played once as the doors open
 
