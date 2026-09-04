@@ -88,6 +88,20 @@ const weddingData = {
     "Grow old together, and stay young in the way you love."
   ],
 
+  /* --- The wedding journey: each ritual raises its own glass arrangement.
+         `scene` names the 3D arrangement in GlassWorld; edit the words freely. --- */
+  journey: [
+    { scene: "haldi", name: "Haldi", line: "Turmeric on our skin, laughter everywhere, and a house that smells of marigold." },
+    { scene: "mehndi", name: "Mehndi", line: "Henna cones, cold coffee at midnight, and a name hidden in the pattern." },
+    { scene: "sangeet", name: "Sangeet", line: "Every cousin has a routine. The dhol decides how late the night runs." },
+    { scene: "baraat", name: "Baraat", line: "A white horse, a brass band, and a street that has to wait for us." },
+    { scene: "jaimala", name: "Jaimala", line: "Two garlands, one moment, and everyone lifting the couple higher." },
+    { scene: "mandap", name: "Mandap", line: "Four pillars, a lit kalash, and the people who raised us sitting close." },
+    { scene: "phere", name: "Saat Phere", line: "Seven rounds of the fire. Seven promises we intend to keep." },
+    { scene: "vidaai", name: "Vidaai", line: "Rice thrown over a shoulder, a doli at the gate, and every eye wet." },
+    { scene: "reception", name: "Reception", line: "Crystal, candlelight, and the first evening of the rest of it." }
+  ],
+
   /* --- Travel & stay --- */
   travel: [
     { title: "By Air", body: "[EDIT] Nearest airport and roughly how long the drive takes." },
@@ -231,6 +245,20 @@ function bindContent() {
       </button>`).join("");
   }
 
+  /* The wedding journey */
+  const journey = $("#journey");
+  if (journey) {
+    journey.innerHTML = weddingData.journey.map((r, i) => `
+      <li class="ritual" data-scene="${r.scene}">
+        <div class="ritual__card">
+          <span class="ritual__no" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span>
+          <h3 class="ritual__name">${r.name}</h3>
+          <p class="ritual__line">${r.line}</p>
+          ${r.scene === "mehndi" ? mehndiPattern() : ""}
+        </div>
+      </li>`).join("");
+  }
+
   /* Dress code */
   const dress = $("#dress-grid");
   if (dress) {
@@ -263,6 +291,25 @@ function bindContent() {
   if (audio) audio.src = weddingData.music;
 
   document.documentElement.lang = "en";
+}
+
+/* An SVG mehndi motif that draws itself as the Mehndi ritual arrives. */
+function mehndiPattern() {
+  const petals = Array.from({ length: 8 }, (_, i) => {
+    const a = (i / 8) * 360;
+    return `<path d="M60 60 C 74 44, 74 22, 60 8 C 46 22, 46 44, 60 60Z" transform="rotate(${a} 60 60)"/>`;
+  }).join("");
+  const dots = Array.from({ length: 12 }, (_, i) => {
+    const a = (i / 12) * Math.PI * 2;
+    return `<circle cx="${(60 + Math.cos(a) * 52).toFixed(1)}" cy="${(60 + Math.sin(a) * 52).toFixed(1)}" r="2.2"/>`;
+  }).join("");
+  return `<svg class="mehndi" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+    <g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      ${petals}
+      <circle cx="60" cy="60" r="30"/><circle cx="60" cy="60" r="44"/><circle cx="60" cy="60" r="9"/>
+    </g>
+    <g fill="currentColor" class="mehndi__dots">${dots}</g>
+  </svg>`;
 }
 
 /* ------------------------------------------------------------
@@ -671,6 +718,1062 @@ function initCarousel() {
 }
 
 /* ------------------------------------------------------------
+   8b. FLOATING GLASS DOODLES — a shared material kit and the
+       stylised wedding objects built from it. Every builder
+       returns a THREE.Group so it can be animated on its own,
+       and every geometry is made once and reused.
+   ------------------------------------------------------------ */
+const GlassKit = (() => {
+  let envMap = null, normalMap = null, ready = false;
+  const cache = {};
+
+  const TINT = { rose: 0xC4738C, amber: 0xE0A05C, maroon: 0x9B3A55, ivory: 0xF0D9B8, gold: 0xC9A227 };
+
+  /* Frosted glass needs a surface. This is a small procedural normal map:
+     smooth value noise turned into normals, so even a flat extruded face
+     catches the light and shimmers instead of reading as card. */
+  function frost() {
+    const N = 128;
+    const rnd = new Float32Array(N * N);
+    for (let i = 0; i < N * N; i++) rnd[i] = Math.random();
+    const at = (x, y) => rnd[((y + N) % N) * N + ((x + N) % N)];
+    const height = new Float32Array(N * N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        let v = 0, amp = 0.5, step = 8;
+        for (let o = 0; o < 3; o++) {
+          const x0 = Math.floor(x / step), y0 = Math.floor(y / step);
+          const fx = (x % step) / step, fy = (y % step) / step;
+          const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+          const a = at(x0, y0), b = at(x0 + 1, y0), c = at(x0, y0 + 1), d = at(x0 + 1, y0 + 1);
+          v += (a * (1 - sx) * (1 - sy) + b * sx * (1 - sy) + c * (1 - sx) * sy + d * sx * sy) * amp;
+          amp *= 0.5; step = Math.max(2, step >> 1);
+        }
+        height[y * N + x] = v;
+      }
+    }
+    const cvs = document.createElement("canvas"); cvs.width = cvs.height = N;
+    const ctx2d = cvs.getContext("2d");
+    const img = ctx2d.createImageData(N, N);
+    const h = (x, y) => height[((y + N) % N) * N + ((x + N) % N)];
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const dx = (h(x + 1, y) - h(x - 1, y)) * 2.2;
+        const dy = (h(x, y + 1) - h(x, y - 1)) * 2.2;
+        const len = Math.hypot(dx, dy, 1);
+        const i = (y * N + x) * 4;
+        img.data[i] = ((-dx / len) * 0.5 + 0.5) * 255;
+        img.data[i + 1] = ((-dy / len) * 0.5 + 0.5) * 255;
+        img.data[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx2d.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(cvs);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(2, 2);
+    return t;
+  }
+
+  function environment(renderer) {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 256;
+    const x = c.getContext("2d");
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, "#2A0713"); g.addColorStop(0.42, "#7A2138");
+    g.addColorStop(0.55, "#E7B45A"); g.addColorStop(0.72, "#4A0F20"); g.addColorStop(1, "#12030A");
+    x.fillStyle = g; x.fillRect(0, 0, 512, 256);
+    for (let i = 0; i < 14; i++) {
+      const cx = Math.random() * 512, cy = 40 + Math.random() * 150, r = 12 + Math.random() * 44;
+      const rg = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      rg.addColorStop(0, "rgba(255,225,170,0.9)"); rg.addColorStop(1, "rgba(255,200,120,0)");
+      x.fillStyle = rg; x.beginPath(); x.arc(cx, cy, r, 0, 6.3); x.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    envMap = pmrem.fromEquirectangular(tex).texture;
+    normalMap = frost();
+    tex.dispose(); pmrem.dispose();
+    ready = true;
+    return envMap;
+  }
+
+  const glass = (tint = "rose", opacity = 0.34) => {
+    const key = `g${tint}${opacity}`;
+    const base = new THREE.Color(TINT[tint] || tint);
+    return cache[key] || (cache[key] = new THREE.MeshPhysicalMaterial({
+      color: base, metalness: 0.12, roughness: 0.08,
+      clearcoat: 1, clearcoatRoughness: 0.04,
+      emissive: base.clone().multiplyScalar(0.22), emissiveIntensity: 1,
+      normalMap, normalScale: new THREE.Vector2(0.4, 0.4),
+      transparent: true, opacity: Math.min(1, opacity + 0.12), envMap, envMapIntensity: 2.8,
+      side: THREE.DoubleSide, depthWrite: false
+    }));
+  };
+
+  const gold = (emissive = 0.5) => {
+    const key = `m${emissive}`;
+    return cache[key] || (cache[key] = new THREE.MeshStandardMaterial({
+      color: 0xC9A227, metalness: 0.95, roughness: 0.25,
+      emissive: 0x6E5310, emissiveIntensity: emissive, envMap, envMapIntensity: 1.4
+    }));
+  };
+
+  const line = () => cache.line || (cache.line = new THREE.LineBasicMaterial({
+    color: 0xF2E2B6, transparent: true, opacity: 0.7
+  }));
+
+  const rim = () => cache.rim || (cache.rim = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(0xF2E2B6) }, uPower: { value: 3.2 }, uStrength: { value: 0.5 } },
+    vertexShader: `varying vec3 vN; varying vec3 vV;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0);
+        vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uPower; uniform float uStrength;
+      varying vec3 vN; varying vec3 vV;
+      void main(){ float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uPower);
+        gl_FragColor = vec4(uColor, f * uStrength); }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+  }));
+
+  const emissive = (color = 0xFFD79A) => {
+    const key = `e${color}`;
+    return cache[key] || (cache[key] = new THREE.MeshBasicMaterial({ color }));
+  };
+
+  /* one glass piece: body + gold edges + fresnel rim, all sharing one geometry */
+  function piece(geometry, tint = "rose", opacity = 0.34, edges = true) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(geometry, glass(tint, opacity)));
+    const r = new THREE.Mesh(geometry, rim());
+    r.scale.setScalar(1.012);
+    g.add(r);
+    if (edges) {
+      const e = geometry.userData.edges || (geometry.userData.edges = new THREE.EdgesGeometry(geometry, 28));
+      g.add(new THREE.LineSegments(e, line()));
+    }
+    return g;
+  }
+
+  const lathe = (profile, seg = 26) =>
+    new THREE.LatheGeometry(profile.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+
+  /* an extruded silhouette with a soft bevel, from a path-drawing function */
+  function silhouette(draw, depth = 0.09, bevel = 0.03) {
+    const shape = new THREE.Shape();
+    draw(shape);
+    return new THREE.ExtrudeGeometry(shape, {
+      depth, bevelEnabled: true, bevelThickness: bevel * 1.8, bevelSize: bevel * 1.8,
+      bevelSegments: 3, curveSegments: 14
+    });
+  }
+
+  return { environment, glass, gold, line, rim, emissive, piece, lathe, silhouette, get envMap() { return envMap; }, get ready() { return ready; } };
+})();
+
+/* ===== DOODLE BUILDERS — every one returns a THREE.Group ===== */
+const Doodle = (() => {
+  const G = {};   // geometry cache: build each shape once, reuse everywhere
+
+  const geo = (key, make) => G[key] || (G[key] = make());
+
+  /* --- petals, flowers --- */
+  function petalGeo() {
+    return geo("petal", () => GlassKit.silhouette((s) => {
+      s.moveTo(0, -0.5);
+      s.bezierCurveTo(0.42, -0.18, 0.36, 0.34, 0, 0.55);
+      s.bezierCurveTo(-0.36, 0.34, -0.42, -0.18, 0, -0.5);
+    }, 0.06, 0.02));
+  }
+
+  function createGlassPetal(tint = "rose") {
+    const g = GlassKit.piece(petalGeo(), tint, 0.36);
+    const vein = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.006, 0.006, 0.86, 5),
+      GlassKit.gold(0.8)
+    );
+    g.add(vein);
+    return g;
+  }
+
+  function createGlassFlower(petals = 6, tint = "rose", scale = 1) {
+    const g = new THREE.Group();
+    for (let i = 0; i < petals; i++) {
+      const p = createGlassPetal(tint);
+      p.rotation.z = (i / petals) * Math.PI * 2;
+      p.position.set(Math.cos(i / petals * Math.PI * 2) * 0.42, Math.sin(i / petals * Math.PI * 2) * 0.42, (i % 2) * 0.03);
+      g.add(p);
+    }
+    const core = new THREE.Mesh(geo("core", () => new THREE.SphereGeometry(0.16, 12, 12)), GlassKit.gold(0.9));
+    g.add(core);
+    g.scale.setScalar(scale);
+    return g;
+  }
+
+  function createGlassMarigold(scale = 1) {
+    const g = new THREE.Group();
+    for (let ring = 0; ring < 3; ring++) {
+      const r = 0.18 + ring * 0.12, n = 6 + ring * 3;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + ring * 0.4;
+        const p = new THREE.Mesh(geo("mpetal", () => new THREE.SphereGeometry(0.1, 8, 6)), GlassKit.glass("amber", 0.42));
+        p.position.set(Math.cos(a) * r, Math.sin(a) * r, (ring - 1) * 0.06);
+        p.scale.set(1, 1, 0.6);
+        g.add(p);
+      }
+    }
+    g.add(new THREE.Mesh(geo("mcore", () => new THREE.SphereGeometry(0.12, 10, 10)), GlassKit.gold(1)));
+    g.scale.setScalar(scale);
+    return g;
+  }
+
+  function createGlassLotus() {
+    const g = new THREE.Group();
+    [[8, 0.5, 1.05, 0, 1], [7, 0.34, 0.72, 0.1, 0.78], [5, 0.18, 0.4, 0.2, 0.52]].forEach(([n, r, tilt, y, sc], ring) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + ring * 0.45;
+        const p = GlassKit.piece(petalGeo(), ring === 0 ? "rose" : "ivory", 0.34);
+        p.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+        p.rotation.set(Math.PI / 2 - tilt, 0, -a);
+        p.scale.setScalar(sc);
+        g.add(p);
+      }
+    });
+    g.add(new THREE.Mesh(geo("lotusCore", () => new THREE.SphereGeometry(0.09, 10, 10)), GlassKit.gold(1)));
+    return g;
+  }
+
+  function createGlassLeaf() {
+    const l = GlassKit.piece(geo("leaf", () => GlassKit.silhouette((s) => {
+      s.moveTo(0, -0.55);
+      s.bezierCurveTo(0.5, -0.1, 0.34, 0.4, 0, 0.6);
+      s.bezierCurveTo(-0.34, 0.4, -0.5, -0.1, 0, -0.55);
+    }, 0.05, 0.02)), "amber", 0.3);
+    return l;
+  }
+
+  /* --- vessels --- */
+  const bowlGeo = () => geo("bowl", () => GlassKit.lathe([
+    [0.02, 0], [0.3, 0.02], [0.42, 0.1], [0.5, 0.26], [0.52, 0.38], [0.5, 0.4], [0.43, 0.26], [0.34, 0.08], [0.02, 0.04]
+  ]));
+
+  const kalashGeo = () => geo("kalash", () => GlassKit.lathe([
+    [0.02, 0], [0.26, 0.02], [0.34, 0.1], [0.44, 0.34], [0.42, 0.62], [0.3, 0.84],
+    [0.18, 0.94], [0.16, 1.02], [0.26, 1.1], [0.3, 1.18], [0.14, 1.22], [0.03, 1.24]
+  ]));
+
+  const diyaGeo = () => geo("diya", () => GlassKit.lathe([
+    [0.02, 0], [0.22, 0.01], [0.34, 0.06], [0.4, 0.16], [0.38, 0.2], [0.3, 0.1], [0.18, 0.05], [0.02, 0.04]
+  ]));
+
+  function createGlassBowl(tint = "amber") {
+    const g = GlassKit.piece(bowlGeo(), tint, 0.32);
+    const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.34, 0.04, 20), GlassKit.gold(1.1));
+    fill.position.y = 0.28;
+    g.add(fill);
+    return g;
+  }
+
+  function createGlassKalash() {
+    const g = GlassKit.piece(kalashGeo(), "rose", 0.3);
+    const coconut = new THREE.Mesh(geo("coco", () => new THREE.SphereGeometry(0.19, 14, 12)), GlassKit.glass("amber", 0.5));
+    coconut.position.y = 1.46; coconut.scale.set(1, 1.15, 1); g.add(coconut);
+    for (let i = 0; i < 6; i++) {
+      const leaf = createGlassLeaf();
+      leaf.scale.setScalar(0.62);
+      const a = (i / 6) * Math.PI * 2;
+      leaf.position.set(Math.cos(a) * 0.26, 1.3, Math.sin(a) * 0.26);
+      leaf.rotation.set(1.0, -a, 0.2);
+      g.add(leaf);
+    }
+    return g;
+  }
+
+  function createGlassDiya(lit = true) {
+    const g = GlassKit.piece(diyaGeo(), "amber", 0.4);
+    if (lit) {
+      const flame = new THREE.Mesh(geo("flame", () => new THREE.SphereGeometry(0.06, 10, 10)), GlassKit.emissive(0xFFD79A));
+      flame.position.y = 0.14; flame.scale.set(0.8, 2, 0.8);
+      flame.name = "flame";
+      g.add(flame);
+    }
+    return g;
+  }
+
+  function createGlassSpoon() {
+    const g = new THREE.Group();
+    const b = GlassKit.piece(geo("spoonB", () => new THREE.SphereGeometry(0.1, 10, 8)), "ivory", 0.4, false);
+    b.scale.set(1, 0.4, 1.3);
+    const h = new THREE.Mesh(geo("spoonH", () => new THREE.CylinderGeometry(0.018, 0.018, 0.6, 6)), GlassKit.gold(0.7));
+    h.position.set(0, 0.02, -0.36); h.rotation.x = Math.PI / 2;
+    g.add(b, h);
+    return g;
+  }
+
+  return { GlassKit, geo, createGlassPetal, createGlassFlower, createGlassMarigold, createGlassLotus,
+           createGlassLeaf, createGlassBowl, createGlassKalash, createGlassDiya, createGlassSpoon,
+           petalGeo, bowlGeo, kalashGeo, diyaGeo };
+})();
+
+/* ===== the rest of the doodle family ===== */
+const Doodle2 = (() => {
+  const geo = Doodle.geo;
+  const K = GlassKit;
+
+  /* --- mehndi --- */
+  function createGlassMehndiCone() {
+    const g = K.piece(geo("cone", () => new THREE.ConeGeometry(0.26, 0.9, 16, 1, true)), "maroon", 0.36);
+    const tip = new THREE.Mesh(geo("tip", () => new THREE.ConeGeometry(0.05, 0.16, 8)), K.gold(0.9));
+    tip.position.y = -0.52; tip.rotation.z = Math.PI;
+    g.add(tip);
+    const band = new THREE.Mesh(geo("band", () => new THREE.TorusGeometry(0.2, 0.015, 6, 20)), K.gold(0.8));
+    band.rotation.x = Math.PI / 2; band.position.y = 0.12;
+    g.add(band);
+    return g;
+  }
+
+  function createGlassBangle() {
+    const g = K.piece(geo("bangle", () => new THREE.TorusGeometry(0.32, 0.035, 8, 30)), "rose", 0.34, false);
+    const inlay = new THREE.Mesh(geo("bangleIn", () => new THREE.TorusGeometry(0.32, 0.012, 6, 30)), K.gold(0.9));
+    g.add(inlay);
+    return g;
+  }
+
+  function createGlassJhumka() {
+    const g = new THREE.Group();
+    const dome = K.piece(geo("jhumka", () => new THREE.SphereGeometry(0.22, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2)), "rose", 0.36, false);
+    dome.rotation.x = Math.PI;
+    g.add(dome);
+    const ring = new THREE.Mesh(geo("jring", () => new THREE.TorusGeometry(0.09, 0.014, 6, 16)), K.gold(0.9));
+    ring.position.y = 0.2; g.add(ring);
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const bead = new THREE.Mesh(geo("bead", () => new THREE.SphereGeometry(0.035, 8, 8)), K.gold(1));
+      bead.position.set(Math.cos(a) * 0.21, -0.06, Math.sin(a) * 0.21);
+      g.add(bead);
+    }
+    return g;
+  }
+
+  /* --- sangeet --- */
+  function createGlassDhol() {
+    const g = new THREE.Group();
+    const body = K.piece(geo("dhol", () => K.lathe([
+      [0.02, 0], [0.32, 0], [0.34, 0.08], [0.28, 0.4], [0.28, 0.5], [0.34, 0.82], [0.32, 0.9], [0.02, 0.9]
+    ], 22)), "maroon", 0.34);
+    g.add(body);
+    [0.02, 0.88].forEach((y) => {
+      const rim = new THREE.Mesh(geo("dholRim", () => new THREE.TorusGeometry(0.33, 0.022, 6, 22)), K.gold(0.85));
+      rim.rotation.x = Math.PI / 2; rim.position.y = y; g.add(rim);
+    });
+    for (let i = 0; i < 8; i++) {                       // lacing
+      const a = (i / 8) * Math.PI * 2;
+      const cord = new THREE.Mesh(geo("cord", () => new THREE.CylinderGeometry(0.008, 0.008, 0.86, 4)), K.gold(0.6));
+      cord.position.set(Math.cos(a) * 0.3, 0.45, Math.sin(a) * 0.3);
+      g.add(cord);
+    }
+    g.rotation.z = Math.PI / 2;
+    return g;
+  }
+
+  function createGlassNote() {
+    const g = new THREE.Group();
+    const head = K.piece(geo("noteHead", () => new THREE.SphereGeometry(0.13, 12, 10)), "ivory", 0.42, false);
+    head.scale.set(1.2, 0.85, 0.5);
+    head.rotation.z = -0.4;
+    const stem = new THREE.Mesh(geo("noteStem", () => new THREE.CylinderGeometry(0.018, 0.018, 0.6, 6)), K.gold(0.9));
+    stem.position.set(0.13, 0.3, 0);
+    const flag = new THREE.Mesh(geo("noteFlag", () => new THREE.TorusGeometry(0.12, 0.016, 6, 12, Math.PI)), K.gold(0.9));
+    flag.position.set(0.2, 0.5, 0); flag.rotation.z = -1.1;
+    g.add(head, stem, flag);
+    return g;
+  }
+
+  function createGhungroo() {
+    const g = new THREE.Group();
+    const strand = new THREE.Mesh(geo("strand", () => new THREE.TorusGeometry(0.3, 0.008, 5, 26)), K.gold(0.7));
+    g.add(strand);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const bell = K.piece(geo("ghung", () => new THREE.SphereGeometry(0.055, 8, 8)), "amber", 0.5, false);
+      bell.position.set(Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0);
+      g.add(bell);
+    }
+    return g;
+  }
+
+  /* --- silhouettes: minimal, elegant, never cartoonish --- */
+  function createGlassHorse() {
+    const g = new THREE.Group();
+    const body = K.piece(geo("horse", () => K.silhouette((s) => {
+      s.moveTo(0.30, 0.06);
+      s.lineTo(0.34, -0.86); s.lineTo(0.22, -0.86); s.lineTo(0.20, 0.06);    // foreleg
+      s.lineTo(0.14, 0.06); s.lineTo(0.12, -0.80); s.lineTo(0.02, -0.80); s.lineTo(0.04, 0.04);
+      s.lineTo(-0.14, 0.04);                                                 // belly
+      s.lineTo(-0.16, -0.80); s.lineTo(-0.28, -0.80); s.lineTo(-0.26, 0.04);  // hind leg
+      s.lineTo(-0.40, 0.04); s.lineTo(-0.44, -0.86); s.lineTo(-0.56, -0.86); s.lineTo(-0.54, 0.06);
+      s.quadraticCurveTo(-0.66, 0.22, -0.48, 0.34);                          // rump
+      s.quadraticCurveTo(-0.10, 0.46, 0.22, 0.36);                           // back
+      s.quadraticCurveTo(0.34, 0.62, 0.44, 0.86);                            // neck
+      s.quadraticCurveTo(0.50, 0.99, 0.66, 0.96);                            // crest
+      s.lineTo(0.82, 0.84);                                                  // forehead
+      s.quadraticCurveTo(0.92, 0.78, 0.86, 0.68);                            // muzzle
+      s.lineTo(0.64, 0.70);                                                  // jaw
+      s.quadraticCurveTo(0.50, 0.64, 0.44, 0.48);                            // throat
+      s.quadraticCurveTo(0.36, 0.26, 0.30, 0.06);
+      s.closePath();
+    }, 0.11, 0.03)), "amber", 0.34);
+    body.position.set(-0.11, -0.2, 0);
+    g.add(body);
+    const ear = new THREE.Mesh(geo("ear", () => new THREE.ConeGeometry(0.05, 0.13, 6)), K.gold(0.8));
+    ear.position.set(0.49, 0.82, 0); ear.rotation.z = -0.3;
+    g.add(ear);
+    const tail = K.piece(geo("tail", () => K.silhouette((s) => {
+      s.moveTo(0, 0.3);
+      s.quadraticCurveTo(0.24, 0.05, 0.12, -0.34);
+      s.quadraticCurveTo(0.06, -0.06, -0.08, 0.3);
+      s.closePath();
+    }, 0.06, 0.02)), "amber", 0.4, false);
+    tail.position.set(-0.72, -0.08, 0);
+    g.add(tail);
+    return g;
+  }
+
+  function createGroomSilhouette() {
+    return K.piece(geo("groom", () => K.silhouette((s) => {
+      s.moveTo(-0.16, -0.6);
+      s.lineTo(-0.2, 0.1); s.quadraticCurveTo(-0.22, 0.3, -0.1, 0.36);
+      s.quadraticCurveTo(-0.16, 0.52, 0, 0.56);      // head
+      s.quadraticCurveTo(0.16, 0.52, 0.1, 0.36);
+      s.quadraticCurveTo(0.22, 0.3, 0.2, 0.1);
+      s.lineTo(0.16, -0.6);
+      s.closePath();
+    }, 0.08, 0.025)), "ivory", 0.38);
+  }
+
+  function createBrideSilhouette() {
+    return K.piece(geo("bride", () => K.silhouette((s) => {
+      s.moveTo(-0.3, -0.6);
+      s.quadraticCurveTo(-0.2, 0.05, -0.16, 0.2);
+      s.quadraticCurveTo(-0.2, 0.36, -0.08, 0.4);
+      s.quadraticCurveTo(-0.14, 0.54, 0, 0.58);
+      s.quadraticCurveTo(0.14, 0.54, 0.08, 0.4);
+      s.quadraticCurveTo(0.2, 0.36, 0.16, 0.2);
+      s.quadraticCurveTo(0.2, 0.05, 0.3, -0.6);
+      s.closePath();
+    }, 0.08, 0.025)), "rose", 0.4);
+  }
+
+  function createGlassSehra() {                       // the groom's veil of flowers
+    const g = new THREE.Group();
+    for (let i = 0; i < 7; i++) {
+      const strand = new THREE.Group();
+      const len = 4 + Math.round(Math.abs(Math.sin(i * 1.3)) * 3);
+      for (let j = 0; j < len; j++) {
+        const bead = K.piece(geo("sehraBead", () => new THREE.SphereGeometry(0.05, 8, 8)),
+          j % 3 === 0 ? "amber" : (j % 3 === 1 ? "rose" : "ivory"), 0.46, false);
+        bead.position.set(Math.sin(j * 0.5 + i) * 0.03, -0.1 - j * 0.12, 0);
+        bead.scale.setScalar(0.85 + (j % 2) * 0.3);
+        strand.add(bead);
+      }
+      strand.position.x = (i - 3) * 0.085;
+      g.add(strand);
+    }
+    const crown = new THREE.Mesh(geo("sehraTop", () => new THREE.TorusGeometry(0.3, 0.022, 6, 22, Math.PI)), K.gold(0.95));
+    g.add(crown);
+    for (let i = 0; i < 4; i++) {
+      const f = Doodle.createGlassMarigold(0.3);
+      f.position.set((i - 1.5) * 0.16, 0.06, 0.04);
+      g.add(f);
+    }
+    return g;
+  }
+
+  function createGlassShehnai() {
+    const g = K.piece(geo("shehnai", () => K.lathe([
+      [0.03, 0], [0.05, 0.1], [0.055, 0.5], [0.08, 0.72], [0.16, 0.86], [0.26, 0.96], [0.24, 0.99], [0.03, 0.9]
+    ], 18)), "amber", 0.4);
+    return g;
+  }
+
+  function createGlassUmbrella() {
+    const g = new THREE.Group();
+    const canopy = K.piece(geo("umbrella", () => new THREE.SphereGeometry(0.6, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2.6)), "maroon", 0.32, false);
+    g.add(canopy);
+    const pole = new THREE.Mesh(geo("pole", () => new THREE.CylinderGeometry(0.014, 0.014, 1.1, 6)), K.gold(0.7));
+    pole.position.y = -0.4; g.add(pole);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const tassel = new THREE.Mesh(geo("tassel", () => new THREE.SphereGeometry(0.03, 6, 6)), K.gold(1));
+      tassel.position.set(Math.cos(a) * 0.58, -0.02, Math.sin(a) * 0.58);
+      g.add(tassel);
+    }
+    return g;
+  }
+
+  /* --- jaimala --- */
+  function createGlassGarland(radius = 0.9) {
+    const g = new THREE.Group();
+    const n = 22;
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const a = Math.PI * (0.1 + t * 0.8);
+      const flower = i % 3 === 0
+        ? Doodle.createGlassMarigold(0.34)
+        : K.piece(geo("gbead", () => new THREE.SphereGeometry(0.1, 10, 8)), i % 3 === 1 ? "rose" : "ivory", 0.42, false);
+      flower.position.set(-Math.cos(a) * radius, -Math.sin(a) * radius * 0.8, Math.sin(i * 1.7) * 0.06);
+      g.add(flower);
+    }
+    return g;
+  }
+
+  function createGlassRing() {
+    const g = K.piece(geo("ring", () => new THREE.TorusGeometry(0.22, 0.045, 10, 26)), "ivory", 0.3, false);
+    const band = new THREE.Mesh(geo("ringBand", () => new THREE.TorusGeometry(0.22, 0.018, 8, 26)), K.gold(1));
+    g.add(band);
+    const stone = new THREE.Mesh(geo("stone", () => new THREE.OctahedronGeometry(0.075, 0)), K.emissive(0xFFF0CC));
+    stone.position.y = 0.24;
+    g.add(stone);
+    return g;
+  }
+
+  /* --- mandap, fire, doli, reception --- */
+  function createGlassMandap() {
+    const g = new THREE.Group();
+    const pillarGeo = geo("pillar", () => K.lathe([
+      [0.12, 0], [0.16, 0.06], [0.1, 0.12], [0.1, 1.5], [0.16, 1.58], [0.12, 1.66], [0.02, 1.68]
+    ], 14));
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, z]) => {
+      const p = K.piece(pillarGeo, "rose", 0.3, false);
+      p.position.set(x * 1.15, -0.85, z * 1.15);
+      g.add(p);
+    });
+    const canopy = K.piece(geo("canopy", () => new THREE.SphereGeometry(1.9, 22, 10, 0, Math.PI * 2, 0, Math.PI / 3.4)), "maroon", 0.26, false);
+    canopy.position.y = 0.7;
+    g.add(canopy);
+    const finial = new THREE.Mesh(geo("finial", () => new THREE.ConeGeometry(0.12, 0.4, 10)), K.gold(0.9));
+    finial.position.y = 1.24; g.add(finial);
+    /* floral toran between the front pillars */
+    for (let i = 0; i <= 9; i++) {
+      const t = i / 9;
+      const bead = K.piece(geo("toran", () => new THREE.SphereGeometry(0.07, 8, 8)), i % 2 ? "amber" : "rose", 0.46, false);
+      bead.position.set((t - 0.5) * 2.3, 0.62 - Math.sin(t * Math.PI) * 0.28, 1.15);
+      g.add(bead);
+    }
+    return g;
+  }
+
+  function createSacredFire() {
+    const g = new THREE.Group();
+    const bowl = K.piece(geo("kund", () => K.lathe([
+      [0.02, 0], [0.5, 0], [0.55, 0.06], [0.5, 0.3], [0.46, 0.32], [0.48, 0.08], [0.4, 0.04], [0.02, 0.03]
+    ], 18)), "maroon", 0.34);
+    g.add(bowl);
+    for (let i = 0; i < 5; i++) {
+      const f = new THREE.Mesh(geo("fire", () => new THREE.ConeGeometry(0.12, 0.5, 8)), K.emissive(i % 2 ? 0xFFD79A : 0xFF9A4A));
+      f.position.set((Math.random() - 0.5) * 0.24, 0.34 + Math.random() * 0.12, (Math.random() - 0.5) * 0.24);
+      f.name = "flame";
+      f.userData.phase = Math.random() * 6.28;
+      g.add(f);
+    }
+    return g;
+  }
+
+  function createFireRing() {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(geo("fireRing", () => new THREE.TorusGeometry(1.5, 0.02, 8, 80)), K.gold(1.2));
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    for (let i = 0; i < 7; i++) {                       // the seven vows
+      const a = (i / 7) * Math.PI * 2;
+      const p = new THREE.Mesh(geo("vow", () => new THREE.SphereGeometry(0.075, 10, 10)), K.emissive(0xFFE0A8));
+      p.position.set(Math.cos(a) * 1.5, 0, Math.sin(a) * 1.5);
+      p.name = "vow"; p.userData.index = i;
+      g.add(p);
+    }
+    return g;
+  }
+
+  function createGlassDoli() {
+    const g = new THREE.Group();
+    const cabin = K.piece(geo("doli", () => new THREE.BoxGeometry(1.05, 0.7, 0.7)), "maroon", 0.3);
+    g.add(cabin);
+    const roof = K.piece(geo("doliRoof", () => new THREE.ConeGeometry(0.85, 0.42, 4)), "rose", 0.34, false);
+    roof.position.y = 0.55; roof.rotation.y = Math.PI / 4;
+    g.add(roof);
+    const pole = new THREE.Mesh(geo("doliPole", () => new THREE.CylinderGeometry(0.026, 0.026, 2.4, 6)), K.gold(0.7));
+    pole.rotation.z = Math.PI / 2; pole.position.y = 0.42;
+    g.add(pole);
+    for (let i = 0; i < 6; i++) {
+      const t = new THREE.Mesh(geo("doliTassel", () => new THREE.SphereGeometry(0.05, 6, 6)), K.gold(1));
+      t.position.set(-0.5 + i * 0.2, -0.4, 0.36);
+      g.add(t);
+    }
+    return g;
+  }
+
+  function createGlassGoblet() {
+    return K.piece(geo("goblet", () => K.lathe([
+      [0.02, 0], [0.28, 0], [0.3, 0.03], [0.06, 0.06], [0.035, 0.1], [0.035, 0.42],
+      [0.26, 0.56], [0.3, 0.8], [0.28, 0.82], [0.24, 0.58], [0.03, 0.44], [0.02, 0.1]
+    ], 20)), "ivory", 0.3);
+  }
+
+  function createHangingLight() {
+    const g = new THREE.Group();
+    const shade = K.piece(geo("shade", () => new THREE.SphereGeometry(0.22, 14, 10)), "amber", 0.34, false);
+    const core = new THREE.Mesh(geo("bulb", () => new THREE.SphereGeometry(0.08, 8, 8)), K.emissive(0xFFD79A));
+    const wire = new THREE.Mesh(geo("wire", () => new THREE.CylinderGeometry(0.005, 0.005, 1.2, 4)), K.gold(0.5));
+    wire.position.y = 0.6;
+    g.add(shade, core, wire);
+    return g;
+  }
+
+  function createMandalaShard() {
+    const g = K.piece(geo("shard", () => new THREE.TorusGeometry(0.3, 0.02, 6, 20)), "ivory", 0.3, false);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const p = new THREE.Mesh(geo("shardP", () => new THREE.TorusGeometry(0.09, 0.012, 5, 12)), GlassKit.gold(0.8));
+      p.position.set(Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0);
+      p.rotation.z = a;
+      g.add(p);
+    }
+    return g;
+  }
+
+  /* Saat Phere is a composition, not a scatter: the fire at the centre, the
+     seven vows circling it, the couple turning slowly around them both. */
+  function createPhereComposition() {
+    const g = new THREE.Group();
+    const fire = createSacredFire();
+    fire.scale.setScalar(1.1);
+    g.add(fire);
+
+    const ring = createFireRing();
+    ring.position.y = 0.1;
+    g.add(ring);
+
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(2.1, 0.012, 6, 90),
+      K.gold(0.9)
+    );
+    halo.rotation.x = Math.PI / 2;
+    halo.position.y = 0.1;
+    g.add(halo);
+
+    const groom = createGroomSilhouette();
+    groom.scale.setScalar(1.5);
+    groom.position.set(-1.5, 0.75, 0.4);
+    groom.name = "orbitA";
+    const bride = createBrideSilhouette();
+    bride.scale.setScalar(1.5);
+    bride.position.set(1.5, 0.75, -0.4);
+    bride.name = "orbitB";
+    g.add(groom, bride);
+    return g;
+  }
+
+  /* the mandap with its kalash and lamps already set out beneath it */
+  function createMandapComposition() {
+    const g = new THREE.Group();
+    g.add(createGlassMandap());
+    const kalash = Doodle.createGlassKalash();
+    kalash.scale.setScalar(0.7);
+    kalash.position.set(-1.5, -1.4, 0.9);
+    g.add(kalash);
+    [[1.5, 0.9], [-0.8, 1.4], [0.9, 1.5]].forEach(([x, z], i) => {
+      const d = Doodle.createGlassDiya(true);
+      d.scale.setScalar(0.85);
+      d.position.set(x, -1.55, z);
+      g.add(d);
+    });
+    const fire = createSacredFire();
+    fire.scale.setScalar(0.75);
+    fire.position.y = -1.6;
+    g.add(fire);
+    return g;
+  }
+
+  return { createPhereComposition, createMandapComposition, createGlassMehndiCone, createGlassBangle, createGlassJhumka, createGlassDhol, createGlassNote,
+           createGhungroo, createGlassHorse, createGroomSilhouette, createBrideSilhouette, createGlassSehra,
+           createGlassShehnai, createGlassUmbrella, createGlassGarland, createGlassRing, createGlassMandap,
+           createSacredFire, createFireRing, createGlassDoli, createGlassGoblet, createHangingLight, createMandalaShard };
+})();
+
+Object.assign(Doodle, Doodle2);
+
+/* ------------------------------------------------------------
+   8c. GLASS WORLD — the floating doodle stage.
+       One stage group rides in front of the camera; each ritual
+       owns an arrangement that is built once, then revealed,
+       floated and retired as the page scrolls. Nothing is ever
+       destroyed and rebuilt.
+   ------------------------------------------------------------ */
+const GlassWorld = (() => {
+  let world = null, stage = null, ambient = null;
+  const scenes = {};          // id -> { group, items[], built }
+  let active = null;
+  let layoutW = 6, layoutH = 4;
+  const DIST = 7;             // how far the stage sits in front of the camera
+
+  /* Each entry: builder, normalised position (-1..1 of the half viewport),
+     depth (z inside the stage), scale, and how it should drift.
+     `m` marks the pieces worth keeping on a small screen. */
+  const RITUALS = [
+    { id: "haldi", items: [
+      { make: () => Doodle.createGlassBowl("amber"), nx: 0.3, ny: -0.22, z: 0.9, s: 2.2, spin: 0.06, pitch: -0.5, m: 1 },
+      { make: () => Doodle.createGlassMarigold(1), nx: -0.42, ny: 0.42, z: -1.2, s: 1.1, spin: 0.2, m: 1 },
+      { make: () => Doodle.createGlassMarigold(1), nx: 0.66, ny: 0.3, z: 0.2, s: 0.9, spin: -0.16 },
+      { make: () => Doodle.createGlassDiya(true), nx: 0.82, ny: -0.5, z: 0.9, s: 1.5, spin: 0.05, pitch: -0.45, m: 1 },
+      { make: () => Doodle.createGlassSpoon(), nx: -0.86, ny: 0.12, z: -0.4, s: 1.1, spin: 0.3 },
+      { make: () => Doodle.createGlassFlower(6, "amber", 1), nx: 0.3, ny: -0.62, z: -1.6, s: 0.9, spin: 0.14 }
+    ] },
+    { id: "mehndi", items: [
+      { make: () => Doodle.createGlassMehndiCone(), nx: -0.74, ny: 0.3, z: 0.7, s: 1.3, spin: 0.1, tilt: -0.5, m: 1 },
+      { make: () => Doodle.createGlassBangle(), nx: 0.7, ny: 0.36, z: 0.1, s: 1.4, spin: 0.4, m: 1 },
+      { make: () => Doodle.createGlassBangle(), nx: 0.82, ny: 0.06, z: -0.8, s: 1.1, spin: -0.3 },
+      { make: () => Doodle.createGlassJhumka(), nx: -0.66, ny: -0.44, z: 0.4, s: 1.4, spin: 0.12, m: 1 },
+      { make: () => Doodle.createGlassLeaf(), nx: 0.44, ny: -0.56, z: -1.4, s: 1.2, spin: 0.22 },
+      { make: () => Doodle.createGlassPetal("rose"), nx: -0.3, ny: 0.6, z: -1.8, s: 1, spin: 0.26 }
+    ] },
+    { id: "sangeet", items: [
+      { make: () => Doodle.createGlassDhol(), nx: -0.7, ny: -0.3, z: 0.5, s: 1.6, spin: 0.08, m: 1 },
+      { make: () => Doodle.createGlassNote(), nx: 0.62, ny: 0.44, z: 0.3, s: 1.2, spin: 0.1, rise: 1, m: 1 },
+      { make: () => Doodle.createGlassNote(), nx: 0.84, ny: -0.1, z: -0.9, s: 0.9, spin: -0.14, rise: 1 },
+      { make: () => Doodle.createGhungroo(), nx: -0.5, ny: 0.5, z: -1.1, s: 1.3, spin: 0.34, m: 1 },
+      { make: () => Doodle.createHangingLight(), nx: 0.2, ny: 0.72, z: -1.6, s: 1.1, spin: 0.05 },
+      { make: () => Doodle.createGlassNote(), nx: -0.28, ny: -0.6, z: -1.5, s: 0.8, spin: 0.2, rise: 1 }
+    ] },
+    { id: "baraat", items: [
+      { make: () => Doodle.createGlassHorse(), nx: -0.5, ny: -0.16, z: 0.2, s: 2.1, spin: 0.02, breathe: 1, m: 1 },
+      { make: () => Doodle.createGroomSilhouette(), nx: -0.52, ny: 0.36, z: 0.35, s: 0.85, spin: 0, m: 1 },
+      { make: () => Doodle.createGlassSehra(), nx: 0.72, ny: 0.36, z: 0.4, s: 1.3, spin: 0.05, m: 1 },
+      { make: () => Doodle.createGlassShehnai(), nx: 0.84, ny: -0.32, z: -0.6, s: 1.5, spin: 0.12, tilt: 0.6 },
+      { make: () => Doodle.createGlassDhol(), nx: 0.34, ny: -0.62, z: -1.3, s: 1, spin: 0.14 },
+      { make: () => Doodle.createGlassUmbrella(), nx: -0.86, ny: 0.56, z: -1.7, s: 1.2, spin: 0.06 }
+    ] },
+    { id: "jaimala", items: [
+      { make: () => Doodle.createGlassGarland(1.1), nx: 0, ny: 0.52, z: -0.4, s: 1.5, swing: 1, m: 1 },
+      { make: () => Doodle.createGlassFlower(6, "rose", 1), nx: -0.78, ny: -0.1, z: 0.5, s: 1.3, spin: 0.16, m: 1 },
+      { make: () => Doodle.createGlassMarigold(1), nx: 0.76, ny: -0.16, z: 0.3, s: 1.2, spin: -0.2, m: 1 },
+      { make: () => Doodle.createGlassLotus(), nx: 0.44, ny: -0.6, z: -0.8, s: 1.2, spin: 0.1 },
+      { make: () => Doodle.createGlassRing(), nx: -0.4, ny: -0.58, z: 0.7, s: 1.2, spin: 0.4, m: 1 },
+      { make: () => Doodle.createGlassRing(), nx: -0.26, ny: -0.66, z: 0.4, s: 1, spin: -0.32 }
+    ] },
+    { id: "mandap", items: [
+      { make: () => Doodle.createMandapComposition(), nx: 0.18, ny: 0.0, z: -1.4, s: 5.6, spin: 0.02, yaw: -0.32, pitch: -0.12, m: 1 },
+      { make: () => Doodle.createGlassMarigold(1), nx: -0.8, ny: 0.5, z: 0.4, s: 0.9, spin: 0.18, m: 1 },
+      { make: () => Doodle.createGlassPetal("rose"), nx: 0.86, ny: -0.5, z: 0.3, s: 0.8, spin: 0.24 }
+    ] },
+    { id: "phere", items: [
+      { make: () => Doodle.createPhereComposition(), nx: 0.2, ny: 0.06, z: -0.9, s: 6, orbitPair: 1, yaw: -0.12, pitch: -0.5, m: 1 },
+      { make: () => Doodle.createGlassPetal("amber"), nx: -0.84, ny: 0.52, z: 0.4, s: 0.8, spin: 0.22, m: 1 },
+      { make: () => Doodle.createMandalaShard(), nx: 0.9, ny: 0.56, z: -1.6, s: 1, spin: 0.08 }
+    ] },
+    { id: "vidaai", items: [
+      { make: () => Doodle.createGlassDoli(), nx: -0.36, ny: -0.2, z: 0.1, s: 1.5, spin: 0.02, sway: 1, m: 1 },
+      { make: () => Doodle.createGlassPetal("rose"), nx: 0.5, ny: 0.5, z: 0.5, s: 1.2, spin: 0.3, fall: 1, m: 1 },
+      { make: () => Doodle.createGlassPetal("ivory"), nx: 0.74, ny: 0.1, z: -0.7, s: 1, spin: -0.26, fall: 1 },
+      { make: () => Doodle.createGlassPetal("amber"), nx: 0.24, ny: 0.66, z: -1.4, s: 0.9, spin: 0.34, fall: 1, m: 1 },
+      { make: () => Doodle.createGlassMarigold(1), nx: -0.8, ny: 0.5, z: -1.1, s: 0.9, spin: 0.12 }
+    ] },
+    { id: "reception", items: [
+      { make: () => Doodle.createGlassGoblet(), nx: -0.72, ny: -0.3, z: 0.7, s: 1.4, spin: 0.06, m: 1 },
+      { make: () => Doodle.createGlassGoblet(), nx: -0.56, ny: -0.44, z: 0.2, s: 1.1, spin: -0.05 },
+      { make: () => Doodle.createHangingLight(), nx: 0.5, ny: 0.66, z: 0.1, s: 1.3, spin: 0.04, m: 1 },
+      { make: () => Doodle.createHangingLight(), nx: 0.8, ny: 0.44, z: -1, s: 1, spin: -0.04, m: 1 },
+      { make: () => Doodle.createGlassLotus(), nx: 0.66, ny: -0.4, z: 0.3, s: 1.3, spin: 0.1, m: 1 },
+      { make: () => Doodle.createMandalaShard(), nx: -0.3, ny: 0.6, z: -1.6, s: 1.4, spin: 0.1 }
+    ] }
+  ];
+
+  /* Builders return objects of every size, so each one is measured and
+     fitted to a real world size before it is placed. */
+  const BASE = () => (env.mobile ? 0.5 : 0.62);
+
+  function fit(node, size) {
+    const box = new THREE.Box3().setFromObject(node);
+    const centre = box.getCenter(new THREE.Vector3());
+    const span = box.getSize(new THREE.Vector3());
+    const max = Math.max(span.x, span.y, span.z) || 1;
+    node.children.forEach((child) => child.position.sub(centre));
+    node.scale.multiplyScalar(size / max);
+    return node;
+  }
+
+  /* how far the stage reaches at DIST, so arrangements fit any screen */
+  function measure() {
+    const cam = world.camera;
+    const half = Math.tan((cam.fov * Math.PI / 180) / 2) * DIST;
+    layoutH = half * 0.86;
+    layoutW = half * cam.aspect * 0.92;
+  }
+
+  /* On a phone the caption owns the middle of the screen, so the arrangement
+     moves into the clear bands above and below it rather than hiding behind. */
+  function place(item, node, i) {
+    let nx = item.nx, ny = item.ny;
+    if (env.mobile) {
+      nx = item.nx * 0.6;
+      const side = ny >= 0 ? 1 : -1;
+      ny = side * Math.max(Math.abs(ny), 0.66 + (i % 2) * 0.16);
+    }
+    node.position.set(nx * layoutW, ny * layoutH, item.z);
+    node.userData.home = node.position.clone();
+  }
+
+  /* Materials are shared for speed, but a scene has to fade on its own —
+     so each scene takes private clones while still sharing all geometry. */
+  function isolate(node, store) {
+    node.traverse((o) => {
+      if (!o.material) return;
+      const many = Array.isArray(o.material);
+      const list = many ? o.material : [o.material];
+      const cloned = list.map((m) => {
+        if (!store.has(m)) {
+          const c = m.clone();
+          c.userData.o0 = m.opacity !== undefined ? m.opacity : 1;
+          if (c.uniforms && c.uniforms.uStrength) c.userData.s0 = c.uniforms.uStrength.value;
+          store.set(m, c);
+        }
+        return store.get(m);
+      });
+      o.material = many ? cloned : cloned[0];
+    });
+  }
+
+  function build(def) {
+    const group = new THREE.Group();
+    group.visible = false;
+    const store = new Map();
+    const budget = env.mobile ? 3 : (env.reduced ? 3 : 6);
+    const chosen = env.mobile || env.reduced
+      ? def.items.filter((i) => i.m).slice(0, budget)
+      : def.items.slice(0, budget);
+
+    const items = chosen.map((item, i) => {
+      const node = item.make();
+      fit(node, BASE() * item.s);
+      node.userData.baseScale = node.scale.x;
+      node.rotation.y = item.yaw !== undefined ? item.yaw : (i % 2 ? 0.38 : -0.34);
+      node.rotation.x = item.pitch !== undefined ? item.pitch : -0.22;
+      if (item.tilt) node.rotation.z = item.tilt;
+      place(item, node, i);
+      node.userData.phase = i * 1.9 + Math.random() * 2;
+      node.userData.def = item;
+      isolate(node, store);
+      group.add(node);
+      return node;
+    });
+
+    group.userData.items = items;
+    stage.add(group);
+    return { group, items, def };
+  }
+
+  /* a thin scatter of glass that lives behind every section */
+  function buildAmbient() {
+    ambient = new THREE.Group();
+    const ambientStore = new Map();
+    const n = env.reduced ? 5 : (env.mobile ? 7 : 14);
+    const makers = [
+      () => Doodle.createGlassPetal("rose"), () => Doodle.createGlassPetal("amber"),
+      () => Doodle.createGlassLeaf(), () => Doodle.createMandalaShard(),
+      () => Doodle.createGlassFlower(5, "ivory", 0.7), () => Doodle.createGlassDiya(false)
+    ];
+    for (let i = 0; i < n; i++) {
+      const node = makers[i % makers.length]();
+      const depth = -2 - Math.random() * 5;
+      fit(node, (env.mobile ? 0.16 : 0.22) + Math.random() * 0.16);
+      node.position.set(
+        (Math.random() - 0.5) * layoutW * 3.4,
+        (Math.random() - 0.5) * layoutH * 3.2,
+        depth
+      );
+      node.userData.phase = Math.random() * 6.28;
+      node.userData.spin = (Math.random() - 0.5) * 0.16;
+      node.userData.rise = 0.12 + Math.random() * 0.2;
+      node.userData.home = node.position.clone();
+      isolate(node, ambientStore);
+      node.traverse((o) => { if (o.material && o.material.transparent) o.renderOrder = -1; });
+      ambient.add(node);
+    }
+    stage.add(ambient);
+  }
+
+  /* entrance: from behind, slightly small and clear, into place */
+  function reveal(scene) {
+    const { group, items } = scene;
+    if (scene.hide) { scene.hide.kill(); scene.hide = null; }
+    group.visible = true;
+    if (!env.gsap) { group.traverse((o) => { if (o.material) o.material.opacity = o.userData.o0 ?? o.material.opacity; }); return; }
+    items.forEach((node, i) => {
+      const home = node.userData.home;
+      gsap.killTweensOf(node.position);
+      gsap.killTweensOf(node.scale);
+      gsap.fromTo(node.position,
+        { z: home.z - 3.4, y: home.y - 0.5 },
+        { z: home.z, y: home.y, duration: 1.5, ease: "power3.out", delay: i * 0.08 });
+      gsap.fromTo(node.scale,
+        { x: node.userData.baseScale * 0.8, y: node.userData.baseScale * 0.8, z: node.userData.baseScale * 0.8 },
+        { x: node.userData.baseScale, y: node.userData.baseScale, z: node.userData.baseScale,
+          duration: 1.5, ease: "back.out(1.6)", delay: i * 0.08 });
+      fade(node, 1, 1.2, i * 0.08);
+    });
+  }
+
+  /* exit: drift back and fade, but keep every object for next time */
+  function retire(scene) {
+    const { group, items } = scene;
+    if (!env.gsap) { group.visible = false; return; }
+    if (scene.hide) scene.hide.kill();
+    items.forEach((node, i) => {
+      const home = node.userData.home;
+      gsap.to(node.position, { z: home.z - 2.2, duration: 1.1, ease: "power2.in", delay: i * 0.03 });
+      fade(node, 0, 0.9, i * 0.03);
+    });
+    scene.hide = gsap.delayedCall(1.2 + items.length * 0.03, () => { group.visible = false; });
+  }
+
+  /* every material in a doodle fades together */
+  function fade(node, to, duration, delay) {
+    const mats = [];
+    node.traverse((o) => {
+      if (!o.material) return;
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      list.forEach((m) => {
+        if (m.userData.o0 === undefined) m.userData.o0 = m.opacity !== undefined ? m.opacity : 1;
+        mats.push(m);
+      });
+    });
+    mats.forEach((m) => {
+      m.transparent = true;
+      if (m.uniforms && m.uniforms.uStrength) {
+        gsap.to(m.uniforms.uStrength, { value: (m.userData.s0 || 0.5) * to, duration, delay, ease: "power2.out" });
+      } else {
+        gsap.to(m, { opacity: m.userData.o0 * to, duration, delay, ease: "power2.out" });
+      }
+    });
+  }
+
+  function show(id) {
+    if (active === id) return;
+    if (active && scenes[active]) retire(scenes[active]);
+    active = id;
+    if (!id) return;
+    if (!scenes[id]) {
+      const def = RITUALS.find((r) => r.id === id);
+      if (!def) return;
+      scenes[id] = build(def);
+      /* start hidden so the reveal has something to animate from */
+      scenes[id].items.forEach((n) => fade(n, 0, 0, 0));
+    }
+    reveal(scenes[id]);
+  }
+
+  /* per-frame: float everything, and let depth drive the parallax */
+  function update(t, dt, pointer, scrollY) {
+    if (!stage) return;
+    const cam = world.camera;
+    stage.position.set(cam.position.x, cam.position.y, cam.position.z - DIST);
+
+    if (ambient) {
+      ambient.children.forEach((n) => {
+        const u = n.userData;
+        n.position.y += u.rise * dt * 0.35;
+        n.position.x = u.home.x + Math.sin(t * 0.22 + u.phase) * 0.5;
+        n.rotation.y += u.spin * dt;
+        n.rotation.z = Math.sin(t * 0.16 + u.phase) * 0.22;
+        if (n.position.y > layoutH * 1.9) n.position.y = -layoutH * 1.9;
+      });
+    }
+
+    const sc = scenes[active];
+    if (sc) {
+      const calm = env.reduced ? 0.25 : 1;      // reduced motion: present, but barely moving
+      sc.items.forEach((n) => {
+        const u = n.userData, d = u.def, home = u.home;
+        const bob = Math.sin(t * 0.42 + u.phase) * (0.22 + (d.z + 2) * 0.04) * calm;
+        /* deeper objects drift less: real layered depth */
+        const depth = 1 - (home.z + 2.4) / 8;
+        n.position.x = home.x + (pointer.x * depth * 0.7 + Math.sin(t * 0.3 + u.phase) * 0.12) * calm;
+        n.position.y = home.y + bob + pointer.y * depth * 0.4 * calm;
+
+        if (d.spin) n.rotation.y += d.spin * dt;
+        if (d.pitch !== undefined) n.rotation.x = d.pitch;
+        if (d.swing) n.rotation.z = Math.sin(t * 0.5 + u.phase) * 0.12;
+        if (d.sway) n.rotation.z = Math.sin(t * 0.7) * 0.05;
+        if (d.breathe) n.scale.setScalar(u.baseScale * (1 + Math.sin(t * 1.1) * 0.014));
+        if (d.rise) {
+          n.position.y = home.y + ((t * 0.35 + u.phase) % 3) - 0.6;
+          n.rotation.z = Math.sin(t * 0.6 + u.phase) * 0.2;
+        }
+        if (d.fall) {
+          n.position.y = home.y - ((t * 0.4 + u.phase) % 3) + 1;
+          n.rotation.x += dt * 0.5;
+        }
+        if (d.orbit) {
+          const a = t * 0.16 * d.orbit + u.phase;
+          n.position.x = home.x + Math.sin(a) * 0.55;
+          n.position.z = home.z + Math.cos(a) * 0.55;
+          n.rotation.y = -a;
+        }
+        if (d.orbitPair) {
+          n.children.forEach((child) => {
+            if (child.name !== "orbitA" && child.name !== "orbitB") return;
+            const dir = child.name === "orbitA" ? 1 : -1;
+            const a = t * 0.2 * dir + (dir > 0 ? 0 : Math.PI);
+            child.position.x = Math.sin(a) * 1.6;
+            child.position.z = Math.cos(a) * 1.6;
+            child.rotation.y = -a + Math.PI;
+            child.rotation.x = -(d.pitch || 0);      // stand upright inside a tilted composition
+          });
+        }
+        n.traverse((child) => {
+          if (child.name === "flame") {
+            child.scale.y = 1.9 + Math.sin(t * 9 + (child.userData.phase || 0)) * 0.35;
+          }
+          if (child.name === "vow") {
+            const k = child.userData.index;
+            child.scale.setScalar(0.8 + Math.abs(Math.sin(t * 1.2 - k * 0.7)) * 0.9);
+          }
+        });
+      });
+    }
+  }
+
+  return {
+    get active() { return active; },
+
+    init(w) {
+      if (!w || !w.renderer || typeof THREE.MeshPhysicalMaterial !== "function") return false;
+      world = w;
+      GlassKit.environment(w.renderer);
+      w.scene.environment = GlassKit.envMap;
+
+      stage = new THREE.Group();
+      w.scene.add(stage);
+      measure();
+      buildAmbient();
+
+      /* glass needs something to catch: a warm key and a cool rim, close in */
+      const key = new THREE.PointLight(0xFFC98A, 1.5, 26, 2);
+      key.position.set(3.5, 2.5, 3);
+      const rim = new THREE.PointLight(0xE7A8C0, 0.9, 24, 2);
+      rim.position.set(-4, -1, 1.5);
+      stage.add(key, rim);
+
+      w.attach(update);
+      return true;
+    },
+
+    resize() { if (stage) measure(); },
+    show
+  };
+})();
+
+/* ------------------------------------------------------------
    8. THREE.JS SCENE — royal palace doors, dust, petals
    ------------------------------------------------------------ */
 const Scene3D = (() => {
@@ -681,6 +1784,7 @@ const Scene3D = (() => {
   let sanctum, mandalas = [], diyas = [], garland;
   let petalState = null, dustState = null;
   const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+  const hooks = [];              // other modules ride this one loop
   let running = false, entered = false;
   let scrollY = 0;
 
@@ -1123,7 +2227,7 @@ const Scene3D = (() => {
 
     /* these ornaments sit far from any lamp, so they carry their own glow */
     const ornament = new THREE.MeshStandardMaterial({
-      color: 0xC9A227, emissive: 0x6E5310, emissiveIntensity: 0.3,
+      color: 0xC9A227, emissive: 0x6E5310, emissiveIntensity: 0.1,
       metalness: 0.5, roughness: 0.45
     });
     const marigold = new THREE.MeshStandardMaterial({
@@ -1309,6 +2413,8 @@ const Scene3D = (() => {
     if (bokeh) bokeh.rotation.y = t * 0.012;
     if (hallGlow) hallGlow.material.opacity = 0.45 + Math.sin(t * 1.6) * 0.09;
 
+    for (let i = 0; i < hooks.length; i++) hooks[i](t, dt, pointer, scrollY);
+
     renderer.render(scene, camera);
   }
 
@@ -1335,6 +2441,7 @@ const Scene3D = (() => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, env.mobile ? 1.5 : 2));
     if (petals) petals.material.uniforms.uScale.value = h * 0.5;
     frameCamera();
+    if (typeof GlassWorld !== "undefined") GlassWorld.resize();
   }
 
   return {
@@ -1342,6 +2449,9 @@ const Scene3D = (() => {
     get api() {
       return { leftPivot, rightPivot, leftHandle, rightHandle, camera, gapGlow, hallGlow, rays, dust, petals, bokeh };
     },
+
+    /* everything the glass stage needs, and a way onto the render loop */
+    get world() { return running ? { scene, camera, renderer, attach: (fn) => hooks.push(fn) } : null; },
 
     init() {
       if (!env.webgl || !env.three) return false;
@@ -1448,6 +2558,13 @@ const Scene3D = (() => {
       camera.userData.baseY = 1.6;
       camera.userData.baseX = 0;
       buildSanctum();
+
+      /* the floating glass stage joins the same scene and the same loop */
+      if (typeof GlassWorld !== "undefined") {
+        try { GlassWorld.init(this.world); }
+        catch (e) { /* glass is a flourish: never let it take the invitation down */ }
+      }
+
       /* dial the effects back: atmosphere, not confetti */
       if (env.gsap) {
         gsap.to(petals.material.uniforms.uOpacity, { value: 0.4, duration: 2.2 });
@@ -1635,6 +2752,60 @@ const Reveal = (() => {
       initFlipCard();
 
       if (!hasST) return;
+
+      /* Whichever ritual owns the middle of the screen owns the glass stage.
+         Deciding it from the geometry each frame is immune to the order
+         scroll callbacks happen to fire in, including big jumps and deep links. */
+      const rituals = $$(".ritual");
+      if (rituals.length && typeof GlassWorld !== "undefined") {
+        let current = null, queued = false;
+
+        const pick = () => {
+          queued = false;
+          const mid = window.innerHeight / 2;
+          let best = null, bestGap = Infinity;
+          rituals.forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.bottom < mid * 0.4 || r.top > window.innerHeight - mid * 0.4) return;
+            const gap = Math.abs((r.top + r.bottom) / 2 - mid);
+            if (gap < bestGap) { bestGap = gap; best = el; }
+          });
+          const id = best ? best.dataset.scene : null;
+          if (id === current) return;
+          current = id;
+          rituals.forEach((el) => el.classList.toggle("is-live", el === best));
+          GlassWorld.show(id);
+        };
+
+        window.addEventListener("scroll", () => {
+          if (queued) return;
+          queued = true;
+          requestAnimationFrame(pick);
+        }, { passive: true });
+        window.addEventListener("resize", () => requestAnimationFrame(pick), { passive: true });
+        window.addEventListener("load", () => requestAnimationFrame(pick));
+        /* lazy images landing above the fold change the page height under us,
+           which would otherwise leave a stale scene on the stage */
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(() => { if (!queued) { queued = true; requestAnimationFrame(pick); } })
+            .observe(document.body);
+        }
+        pick();
+
+        /* the drawn mehndi motif */
+        const mehndi = $(".mehndi");
+        if (mehndi && !env.reduced) {
+          const strokes = $$("path, circle", mehndi);
+          strokes.forEach((el) => {
+            const len = el.getTotalLength ? el.getTotalLength() : 200;
+            gsap.set(el, { strokeDasharray: len, strokeDashoffset: len });
+          });
+          gsap.to(strokes, {
+            strokeDashoffset: 0, duration: 1.5, ease: "power2.inOut", stagger: 0.06,
+            scrollTrigger: { trigger: mehndi, start: "top 78%", once: true }
+          });
+        }
+      }
 
       const dist = env.reduced ? 12 : 44;
       const dur = env.reduced ? 0.4 : 0.95;

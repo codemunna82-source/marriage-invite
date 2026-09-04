@@ -181,6 +181,26 @@ cleanly, it is worth crossfading its tail over its head the same way.
 - Venue card with a Google Maps button, and Travel & Stay cards
 - RSVP that composes a WhatsApp message — no backend, no data collected
 
+**Floating glass doodles**
+Nine wedding rituals — Haldi, Mehndi, Sangeet, Baraat, Jaimala, Mandap, Saat
+Phere, Vidaai, Reception — each raise their own arrangement of translucent
+glass objects on the 3D stage as you scroll into them: a glass haldi bowl and
+marigolds, a mehndi cone with bangles and a jhumka, a dhol with floating notes
+and ghungroo, a glass horse and sehra, a swinging garland with rings, a
+mandap with its kalash and lamps, the sacred fire circled by seven glowing
+vows with the couple turning slowly around it, a doli under falling petals,
+and crystal goblets under hanging lights.
+
+Every object is built from the same kit: a `MeshPhysicalMaterial` with a
+procedural environment map for reflections and a procedural frosted-glass
+normal map, a Fresnel rim that lights the crystal edge, and thin gold edge
+lines. Objects arrive from behind at 0.8 scale, float on their own timing,
+drift by depth under the pointer, and retire backwards — they are never
+destroyed and rebuilt. Geometry is shared across every scene; only materials
+are cloned per scene so one arrangement can fade without touching another.
+Mobile keeps the iconic pieces, moves them into the clear bands above and
+below the caption, and halves the counts.
+
 **The 3D does not stop at the door**
 Once you are inside, the Three.js scene rebuilds itself into a world you scroll
 through: a marigold garland strung across the top of the view, a column of
