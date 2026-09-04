@@ -812,6 +812,48 @@ const GlassKit = (() => {
     }));
   };
 
+  /* Carved crystal rather than a soap bubble: writes depth, so overlapping
+     forms occlude one another and a shape like a trunk actually reads. */
+  const solidGlass = (tint = "rose", opacity = 0.72) => {
+    const key = `s${tint}${opacity}`;
+    const base = new THREE.Color(TINT[tint] || tint);
+    return cache[key] || (cache[key] = new THREE.MeshPhysicalMaterial({
+      color: base, metalness: 0.15, roughness: 0.14,
+      clearcoat: 1, clearcoatRoughness: 0.08,
+      emissive: base.clone().multiplyScalar(0.3), emissiveIntensity: 1,
+      normalMap, normalScale: new THREE.Vector2(0.5, 0.5),
+      transparent: true, opacity, envMap, envMapIntensity: 2.4,
+      side: THREE.FrontSide, depthWrite: true
+    }));
+  };
+
+  const carved = (geometry, tint = "rose", opacity = 0.72, edges = true) => {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(geometry, solidGlass(tint, opacity)));
+    if (edges) {
+      const e = geometry.userData.edges || (geometry.userData.edges = new THREE.EdgesGeometry(geometry, 30));
+      g.add(new THREE.LineSegments(e, line()));
+    }
+    return g;
+  };
+
+  /* Repeated parts — petals, rays, beads — go through one instanced draw
+     call instead of one call each. This is most of the frame budget. */
+  function instanced(geometry, material, transforms) {
+    const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
+    const dummy = new THREE.Object3D();
+    transforms.forEach((t, i) => {
+      dummy.position.set(t.p[0], t.p[1], t.p[2]);
+      if (t.r) dummy.rotation.set(t.r[0], t.r[1], t.r[2]);
+      else dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(t.s || 1, t.sy || t.s || 1, t.s || 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    return mesh;
+  }
+
   const gold = (emissive = 0.5) => {
     const key = `m${emissive}`;
     return cache[key] || (cache[key] = new THREE.MeshStandardMaterial({
@@ -869,7 +911,7 @@ const GlassKit = (() => {
     });
   }
 
-  return { environment, glass, gold, line, rim, emissive, piece, lathe, silhouette, get envMap() { return envMap; }, get ready() { return ready; } };
+  return { environment, glass, solidGlass, carved, instanced, gold, line, rim, emissive, piece, lathe, silhouette, get envMap() { return envMap; }, get ready() { return ready; } };
 })();
 
 /* ===== DOODLE BUILDERS — every one returns a THREE.Group ===== */
@@ -899,30 +941,33 @@ const Doodle = (() => {
 
   function createGlassFlower(petals = 6, tint = "rose", scale = 1) {
     const g = new THREE.Group();
+    const spots = [], veins = [];
     for (let i = 0; i < petals; i++) {
-      const p = createGlassPetal(tint);
-      p.rotation.z = (i / petals) * Math.PI * 2;
-      p.position.set(Math.cos(i / petals * Math.PI * 2) * 0.42, Math.sin(i / petals * Math.PI * 2) * 0.42, (i % 2) * 0.03);
-      g.add(p);
+      const a = (i / petals) * Math.PI * 2;
+      const at = [Math.cos(a) * 0.42, Math.sin(a) * 0.42, (i % 2) * 0.03];
+      spots.push({ p: at, r: [0, 0, a] });
+      veins.push({ p: at, r: [0, 0, a] });
     }
-    const core = new THREE.Mesh(geo("core", () => new THREE.SphereGeometry(0.16, 12, 12)), GlassKit.gold(0.9));
-    g.add(core);
+    g.add(GlassKit.instanced(petalGeo(), GlassKit.glass(tint, 0.36), spots));
+    g.add(GlassKit.instanced(geo("vein", () => new THREE.CylinderGeometry(0.006, 0.006, 0.86, 5)),
+      GlassKit.gold(0.8), veins));
+    g.add(new THREE.Mesh(geo("core", () => new THREE.SphereGeometry(0.16, 12, 12)), GlassKit.gold(0.9)));
     g.scale.setScalar(scale);
     return g;
   }
 
   function createGlassMarigold(scale = 1) {
     const g = new THREE.Group();
+    const spots = [];
     for (let ring = 0; ring < 3; ring++) {
       const r = 0.18 + ring * 0.12, n = 6 + ring * 3;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + ring * 0.4;
-        const p = new THREE.Mesh(geo("mpetal", () => new THREE.SphereGeometry(0.1, 8, 6)), GlassKit.glass("amber", 0.42));
-        p.position.set(Math.cos(a) * r, Math.sin(a) * r, (ring - 1) * 0.06);
-        p.scale.set(1, 1, 0.6);
-        g.add(p);
+        spots.push({ p: [Math.cos(a) * r, Math.sin(a) * r, (ring - 1) * 0.06] });
       }
     }
+    g.add(GlassKit.instanced(geo("mpetal", () => new THREE.SphereGeometry(0.1, 8, 6)),
+      GlassKit.glass("amber", 0.42), spots));
     g.add(new THREE.Mesh(geo("mcore", () => new THREE.SphereGeometry(0.12, 10, 10)), GlassKit.gold(1)));
     g.scale.setScalar(scale);
     return g;
@@ -1404,6 +1449,361 @@ const Doodle2 = (() => {
 Object.assign(Doodle, Doodle2);
 
 /* ------------------------------------------------------------
+   8b-ii. THE INVOCATION MURTIS — Ganesha and Lakshmi, carved as
+   translucent crystal with gold ornament. Faceless by intent: a
+   jewelled glass murti reads as devotional, where a modelled face
+   would read as a toy.
+   ------------------------------------------------------------ */
+/* ===== murtis =====
+   Faceless by intent: a jewelled glass murti reads as devotional, where a
+   modelled face would read as a toy. */
+const Murti = (() => {
+  const K = GlassKit;
+  const G = {};
+  const geo = (k, make) => G[k] || (G[k] = make());
+
+  const tube = (points, r, seg = 20) =>
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p))), seg, r, 8, false);
+
+  /* a seated body: broad lap, round belly, narrow chest */
+  const bodyGeo = (k) => geo(k, () => K.lathe([
+    [0.02, 0], [0.62, 0.02], [0.7, 0.12], [0.66, 0.3], [0.56, 0.5],
+    [0.44, 0.66], [0.34, 0.78], [0.3, 0.9], [0.24, 0.98], [0.02, 1.0]
+  ], 26));
+
+  const lotusBase = (petals = 12, r = 0.9) => {
+    const g = new THREE.Group();
+    const petalGeo = geo("lp", () => K.silhouette((s) => {
+      s.moveTo(0, -0.5);
+      s.bezierCurveTo(0.34, -0.16, 0.28, 0.3, 0, 0.5);
+      s.bezierCurveTo(-0.28, 0.3, -0.34, -0.16, 0, -0.5);
+    }, 0.05, 0.02));
+    for (let ring = 0; ring < 2; ring++) {
+      const n = petals - ring * 3, rad = r - ring * 0.16;
+      const spots = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + ring * 0.3;
+        spots.push({
+          p: [Math.cos(a) * rad, ring * 0.12, Math.sin(a) * rad],
+          r: [Math.PI / 2 - 0.85 + ring * 0.2, 0, -a],
+          s: 0.55 - ring * 0.08
+        });
+      }
+      g.add(K.instanced(petalGeo, K.solidGlass(ring ? "ivory" : "rose", 0.62), spots));
+    }
+    const seat = new THREE.Mesh(geo("seat", () => new THREE.CylinderGeometry(r * 0.52, r * 0.42, 0.1, 20)), K.gold(0.7));
+    seat.position.y = 0.14;
+    g.add(seat);
+    return g;
+  };
+
+  /* crown: a temple mukut, gold, with a finial */
+  const mukut = (r = 0.3, h = 0.42) => {
+    const g = new THREE.Group();
+    const band = new THREE.Mesh(geo("mband", () => new THREE.TorusGeometry(1, 0.07, 8, 24)), K.gold(0.9));
+    band.rotation.x = Math.PI / 2;
+    band.scale.setScalar(r);
+    g.add(band);
+    const cone = K.carved(geo("mcone", () => K.lathe([
+      [0.02, 0], [1, 0.04], [1.05, 0.14], [0.82, 0.3], [0.9, 0.44], [0.7, 0.6],
+      [0.66, 0.72], [0.4, 0.84], [0.3, 0.92], [0.1, 0.99], [0.02, 1]
+    ], 20)), "amber", 0.82, false);
+    cone.scale.set(r, h, r);
+    cone.position.y = 0.05;
+    g.add(cone);
+    const finial = new THREE.Mesh(geo("mfin", () => new THREE.SphereGeometry(0.05, 10, 10)), K.gold(1.1));
+    finial.position.y = h + 0.08;
+    g.add(finial);
+    const jewels = [];
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      jewels.push({ p: [Math.cos(a) * r, 0.06, Math.sin(a) * r] });
+    }
+    g.add(K.instanced(geo("mjewel", () => new THREE.OctahedronGeometry(0.035, 0)), K.gold(1.2), jewels));
+    return g;
+  };
+
+  /* a halo of light behind the head */
+  const prabha = (r = 1.1, tint = 0xE7CE8E) => {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(geo("prabhaR", () => new THREE.TorusGeometry(1, 0.018, 8, 64)), K.gold(1));
+    ring.scale.setScalar(r);
+    g.add(ring);
+    const inner = new THREE.Mesh(geo("prabhaI", () => new THREE.TorusGeometry(1, 0.01, 6, 56)), K.gold(0.7));
+    inner.scale.setScalar(r * 0.82);
+    g.add(inner);
+    const rays = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      rays.push({ p: [Math.cos(a) * r * 1.1, Math.sin(a) * r * 1.1, 0], r: [0, 0, a - Math.PI / 2] });
+    }
+    g.add(K.instanced(geo("prabhaRay", () => new THREE.ConeGeometry(0.022, 0.16, 5)), K.gold(0.9), rays));
+    return g;
+  };
+
+  const arm = (pts, r = 0.075, tint = "rose") =>
+    K.carved(tube(pts, r), tint, 0.8, false);
+
+  function createGanesha() {
+    const g = new THREE.Group();
+
+    g.add(lotusBase(12, 0.95));
+
+    const body = K.carved(bodyGeo("gbody"), "amber", 0.74);
+    body.position.y = 0.18;
+    g.add(body);
+
+    /* the belly, the most recognisable line of the murti */
+    const belly = K.carved(geo("belly", () => new THREE.SphereGeometry(0.46, 20, 16)), "amber", 0.76, false);
+    belly.position.set(0, 0.48, 0.16);
+    belly.scale.set(1, 0.86, 0.8);
+    g.add(belly);
+
+    const sash = new THREE.Mesh(geo("sash", () => new THREE.TorusGeometry(0.44, 0.022, 6, 28)), K.gold(1));
+    sash.position.set(0, 0.52, 0.2);
+    sash.rotation.set(0.3, 0, 0.35);
+    g.add(sash);
+
+    /* head */
+    const head = K.carved(geo("ghead", () => new THREE.SphereGeometry(0.42, 20, 16)), "amber", 0.78, false);
+    head.position.y = 1.34;
+    head.scale.set(1, 0.94, 0.9);
+    g.add(head);
+
+    /* ears: wide, flat, unmistakable */
+    [-1, 1].forEach((side) => {
+      const ear = K.piece(geo("gear", () => K.silhouette((s) => {
+        s.moveTo(0, 0.4);
+        s.bezierCurveTo(0.52, 0.36, 0.62, -0.12, 0.3, -0.42);
+        s.bezierCurveTo(0.12, -0.56, -0.04, -0.3, 0, 0.4);
+      }, 0.06, 0.03)), "amber", 0.72, false);
+      ear.position.set(side * 0.52, 1.3, 0.02);
+      ear.rotation.set(0, side * 0.75, 0);
+      ear.scale.set(side * 1.15, 1.2, 1);
+      g.add(ear);
+      const rim = new THREE.Mesh(geo("gearRim", () => new THREE.TorusGeometry(0.2, 0.012, 6, 20, Math.PI * 1.3)), K.gold(0.9));
+      rim.position.set(side * 0.66, 1.3, 0.08);
+      rim.rotation.set(0, side * 0.5, side * 0.4);
+      g.add(rim);
+    });
+
+    /* trunk, curving to the left and lifting at the tip */
+    const trunk = K.piece(tube([
+      [0, 1.26, 0.42], [-0.02, 1.06, 0.6], [0.06, 0.86, 0.7], [0.22, 0.7, 0.68],
+      [0.32, 0.58, 0.58], [0.26, 0.48, 0.46], [0.14, 0.5, 0.44]
+    ], 0.1, 30), "amber", 0.86, false);
+    g.add(trunk);
+    const trunkTip = new THREE.Mesh(geo("gtip", () => new THREE.SphereGeometry(0.055, 10, 10)), K.gold(0.9));
+    trunkTip.position.set(0.14, 0.5, 0.44);
+    g.add(trunkTip);
+
+    /* the single tusk */
+    const tusk = K.carved(geo("gtusk", () => new THREE.ConeGeometry(0.05, 0.22, 8)), "ivory", 0.9, false);
+    tusk.position.set(-0.22, 1.08, 0.44);
+    tusk.rotation.set(0.5, 0, 0.7);
+    g.add(tusk);
+
+    /* tilak */
+    const tilak = new THREE.Mesh(geo("gtilak", () => new THREE.SphereGeometry(0.035, 8, 8)), K.gold(1.2));
+    tilak.position.set(0, 1.5, 0.38);
+    tilak.scale.set(0.7, 1.3, 0.5);
+    g.add(tilak);
+
+    const crown = mukut(0.3, 0.44);
+    crown.position.y = 1.66;
+    g.add(crown);
+
+    const halo = prabha(1.15);
+    halo.position.set(0, 1.3, -0.55);
+    g.add(halo);
+
+    /* four arms */
+    g.add(arm([[-0.5, 0.86, 0.16], [-0.78, 0.94, 0.1], [-0.9, 1.16, 0.06]], 0.075, "amber"));   // upper left
+    g.add(arm([[0.5, 0.86, 0.16], [0.78, 0.94, 0.1], [0.9, 1.16, 0.06]], 0.075, "amber"));      // upper right
+    g.add(arm([[-0.46, 0.72, 0.24], [-0.66, 0.5, 0.3], [-0.5, 0.34, 0.42]], 0.075, "amber"));   // lower left
+    g.add(arm([[0.46, 0.72, 0.24], [0.66, 0.56, 0.3], [0.62, 0.34, 0.38]], 0.075, "amber"));    // lower right
+
+    const modak = K.piece(geo("modak", () => new THREE.ConeGeometry(0.09, 0.14, 10)), "amber", 0.5, false);
+    modak.position.set(-0.5, 0.3, 0.44);
+    g.add(modak);
+
+    [[-0.9, 1.2, 0.06], [0.9, 1.2, 0.06]].forEach(([x, y, z], i) => {
+      const attr = new THREE.Mesh(geo("gattr", () => new THREE.TorusGeometry(0.09, 0.014, 6, 16)), K.gold(1));
+      attr.position.set(x, y + 0.08, z);
+      attr.rotation.y = i ? -0.4 : 0.4;
+      g.add(attr);
+    });
+
+    return g;
+  }
+
+  function createLakshmi() {
+    const g = new THREE.Group();
+
+    g.add(lotusBase(14, 1.05));
+
+    const body = K.carved(bodyGeo("lbody"), "rose", 0.74);
+    body.position.y = 0.18;
+    body.scale.set(0.82, 1.16, 0.82);
+    g.add(body);
+
+    /* the sari's fall, suggested with two soft drapes */
+    [-1, 1].forEach((side) => {
+      const drape = K.piece(geo("drape", () => K.silhouette((s) => {
+        s.moveTo(0, 0.7);
+        s.bezierCurveTo(0.3, 0.3, 0.34, -0.2, 0.18, -0.7);
+        s.bezierCurveTo(0.06, -0.3, 0.02, 0.2, 0, 0.7);
+      }, 0.04, 0.02)), "amber", 0.7, false);
+      drape.position.set(side * 0.34, 0.6, 0.24);
+      drape.rotation.set(0, side * 0.4, 0);
+      drape.scale.set(side * 0.9, 0.9, 1);
+      g.add(drape);
+    });
+
+    const waist = new THREE.Mesh(geo("waist", () => new THREE.TorusGeometry(0.34, 0.02, 6, 26)), K.gold(1));
+    waist.position.y = 0.72;
+    waist.rotation.x = Math.PI / 2;
+    g.add(waist);
+
+    const head = K.carved(geo("lhead", () => new THREE.SphereGeometry(0.3, 20, 16)), "rose", 0.78, false);
+    head.position.y = 1.42;
+    head.scale.set(1, 1.08, 0.94);
+    g.add(head);
+
+    const bindi = new THREE.Mesh(geo("bindi", () => new THREE.SphereGeometry(0.03, 8, 8)), K.gold(1.2));
+    bindi.position.set(0, 1.5, 0.25);
+    bindi.scale.set(1, 1, 0.5);
+    g.add(bindi);
+
+    /* necklaces */
+    [1.02, 1.14].forEach((y, i) => {
+      const n = new THREE.Mesh(geo("neck", () => new THREE.TorusGeometry(0.16, 0.013, 6, 22)), K.gold(1.1));
+      n.position.set(0, y, 0.1);
+      n.rotation.x = Math.PI / 2 - 0.35;
+      n.scale.setScalar(1 - i * 0.24);
+      g.add(n);
+    });
+
+    const crown = mukut(0.26, 0.5);
+    crown.position.y = 1.64;
+    g.add(crown);
+
+    const halo = prabha(1.05);
+    halo.position.set(0, 1.36, -0.44);
+    g.add(halo);
+
+    /* four arms: two raised with lotuses, two in blessing and giving */
+    g.add(arm([[-0.34, 1.06, 0.14], [-0.62, 1.2, 0.08], [-0.74, 1.5, 0.04]], 0.06, "rose"));
+    g.add(arm([[0.34, 1.06, 0.14], [0.62, 1.2, 0.08], [0.74, 1.5, 0.04]], 0.06, "rose"));
+    g.add(arm([[-0.32, 0.94, 0.2], [-0.54, 0.78, 0.28], [-0.44, 0.62, 0.36]], 0.06, "rose"));
+    g.add(arm([[0.32, 0.94, 0.2], [0.56, 0.86, 0.3], [0.54, 1.02, 0.34]], 0.06, "rose"));
+
+    /* a lotus in each raised hand */
+    [-0.78, 0.78].forEach((x) => {
+      const bloom = Doodle.createGlassFlower(6, "rose", 0.34);
+      bloom.position.set(x, 1.62, 0.04);
+      g.add(bloom);
+    });
+
+    /* coins falling from the lower right hand */
+    for (let i = 0; i < 6; i++) {
+      const coin = new THREE.Mesh(geo("coin", () => new THREE.CylinderGeometry(0.05, 0.05, 0.014, 12)), K.gold(1.1));
+      coin.position.set(-0.44 - Math.sin(i) * 0.06, 0.5 - i * 0.11, 0.38);
+      coin.rotation.set(Math.PI / 2 - 0.4, i * 0.7, 0);
+      coin.name = "coin";
+      coin.userData.index = i;
+      g.add(coin);
+    }
+
+    return g;
+  }
+
+  /* The whole invocation: a temple arch, the two murtis on their lotuses,
+     hanging lamps, flowers at the crown of the arch and diyas at their feet. */
+  function createInvocation() {
+    const g = new THREE.Group();
+
+    /* a pointed temple arch, cut as one piece with a hole through it */
+    const arch = K.carved(geo("arch", () => {
+      const W = 2.9, H = 3.4, F = 0.36;
+      const outline = (w, h) => {
+        const path = new THREE.Path();
+        path.moveTo(-w, -2.15);
+        path.lineTo(-w, 0.4);
+        path.quadraticCurveTo(-w, h * 0.74, 0, h);
+        path.quadraticCurveTo(w, h * 0.74, w, 0.4);
+        path.lineTo(w, -2.15);
+        return path;
+      };
+      const shape = new THREE.Shape(outline(W, H).getPoints(60));
+      const hole = new THREE.Path(outline(W - F, H - F * 1.15).getPoints(60));
+      shape.holes.push(hole);
+      return new THREE.ExtrudeGeometry(shape, {
+        depth: 0.24, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06,
+        bevelSegments: 2, curveSegments: 20
+      });
+    }), "maroon", 0.6);
+    arch.position.z = -1.1;
+    g.add(arch);
+
+    /* a second, thinner arch line in gold, just inside the first */
+    const trim = new THREE.Mesh(
+      geo("archTrim", () => new THREE.TorusGeometry(2.3, 0.028, 8, 60, Math.PI)),
+      K.gold(1)
+    );
+    trim.position.set(0, 0.55, -0.95);
+    g.add(trim);
+
+    const ganesha = createGanesha();
+    ganesha.position.set(-1.32, -1.25, 0.2);
+    ganesha.scale.setScalar(1.02);
+    ganesha.name = "ganesha";
+    g.add(ganesha);
+
+    const lakshmi = createLakshmi();
+    lakshmi.position.set(1.32, -1.25, 0.2);
+    lakshmi.scale.setScalar(1.02);
+    lakshmi.name = "lakshmi";
+    g.add(lakshmi);
+
+    /* lamps hanging from the arch */
+    [[-2.05, 1.5], [2.05, 1.5], [-1.25, 2.35], [1.25, 2.35]].forEach(([x, y], i) => {
+      const lamp = Doodle.createHangingLight();
+      lamp.scale.setScalar(0.62 + (i % 2) * 0.12);
+      lamp.position.set(x, y, 0.1);
+      lamp.name = "lamp";
+      lamp.userData.phase = i * 1.4;
+      g.add(lamp);
+    });
+
+    /* flowers at the crown of the arch and along its shoulders */
+    [[0, 3.32, 1.05], [-1.9, 2.5, 0.8], [1.9, 2.5, 0.8], [-2.7, 1.1, 0.7], [2.7, 1.1, 0.7]]
+      .forEach(([x, y, sc], i) => {
+        const f = i % 2 ? Doodle.createGlassMarigold(sc * 0.9) : Doodle.createGlassFlower(6, "rose", sc * 0.8);
+        f.position.set(x, y, 0.05);
+        f.name = "bloom";
+        f.userData.phase = i * 1.1;
+        g.add(f);
+      });
+
+    /* diyas at their feet */
+    [-2.35, -0.05, 2.35].forEach((x, i) => {
+      const d = Doodle.createGlassDiya(true);
+      d.scale.setScalar(0.8);
+      d.position.set(x, -2.25, 0.7);
+      d.rotation.x = -0.35;
+      g.add(d);
+    });
+
+    return g;
+  }
+
+  return { createGanesha, createLakshmi, createInvocation, lotusBase, mukut, prabha };
+})();
+Object.assign(Doodle, Murti);
+
+
+/* ------------------------------------------------------------
    8c. GLASS WORLD — the floating doodle stage.
        One stage group rides in front of the camera; each ritual
        owns an arrangement that is built once, then revealed,
@@ -1421,6 +1821,9 @@ const GlassWorld = (() => {
      depth (z inside the stage), scale, and how it should drift.
      `m` marks the pieces worth keeping on a small screen. */
   const RITUALS = [
+    { id: "invocation", items: [
+      { make: () => Doodle.createInvocation(), nx: 0, ny: 0.3, z: -0.6, s: 6.2, sm: 3.7, keep: 1, yaw: 0, pitch: 0, shrine: 1, m: 1 }
+    ] },
     { id: "haldi", items: [
       { make: () => Doodle.createGlassBowl("amber"), nx: 0.3, ny: -0.22, z: 0.9, s: 2.2, spin: 0.06, pitch: -0.5, m: 1 },
       { make: () => Doodle.createGlassMarigold(1), nx: -0.42, ny: 0.42, z: -1.2, s: 1.1, spin: 0.2, m: 1 },
@@ -1514,7 +1917,7 @@ const GlassWorld = (() => {
      moves into the clear bands above and below it rather than hiding behind. */
   function place(item, node, i) {
     let nx = item.nx, ny = item.ny;
-    if (env.mobile) {
+    if (env.mobile && !item.keep) {
       nx = item.nx * 0.6;
       const side = ny >= 0 ? 1 : -1;
       ny = side * Math.max(Math.abs(ny), 0.66 + (i % 2) * 0.16);
@@ -1554,7 +1957,9 @@ const GlassWorld = (() => {
 
     const items = chosen.map((item, i) => {
       const node = item.make();
-      fit(node, BASE() * item.s);
+      /* a composed shrine needs its own size on a narrow screen */
+      const size = env.mobile && item.sm ? BASE() * item.sm : BASE() * item.s;
+      fit(node, size);
       node.userData.baseScale = node.scale.x;
       node.rotation.y = item.yaw !== undefined ? item.yaw : (i % 2 ? 0.38 : -0.34);
       node.rotation.x = item.pitch !== undefined ? item.pitch : -0.22;
@@ -1576,7 +1981,7 @@ const GlassWorld = (() => {
   function buildAmbient() {
     ambient = new THREE.Group();
     const ambientStore = new Map();
-    const n = env.reduced ? 5 : (env.mobile ? 7 : 14);
+    const n = env.reduced ? 5 : (env.mobile ? 6 : 11);
     const makers = [
       () => Doodle.createGlassPetal("rose"), () => Doodle.createGlassPetal("amber"),
       () => Doodle.createGlassLeaf(), () => Doodle.createMandalaShard(),
@@ -1719,6 +2124,17 @@ const GlassWorld = (() => {
           n.position.z = home.z + Math.cos(a) * 0.55;
           n.rotation.y = -a;
         }
+        if (d.shrine) {
+          n.rotation.y = Math.sin(t * 0.16) * 0.06;
+          n.traverse((child) => {
+            if (child.name === "lamp") child.rotation.z = Math.sin(t * 0.7 + child.userData.phase) * 0.09;
+            if (child.name === "bloom") child.rotation.y = t * 0.18 + child.userData.phase;
+            if (child.name === "ganesha" || child.name === "lakshmi") {
+              const lift = child.name === "ganesha" ? 0 : 1.1;
+              child.position.y = -1.25 + Math.sin(t * 0.5 + lift) * 0.06;
+            }
+          });
+        }
         if (d.orbitPair) {
           n.children.forEach((child) => {
             if (child.name !== "orbitA" && child.name !== "orbitB") return;
@@ -1733,6 +2149,11 @@ const GlassWorld = (() => {
         n.traverse((child) => {
           if (child.name === "flame") {
             child.scale.y = 1.9 + Math.sin(t * 9 + (child.userData.phase || 0)) * 0.35;
+          }
+          if (child.name === "coin") {
+            const k = child.userData.index;
+            child.position.y = 0.5 - ((t * 0.5 + k * 0.35) % 1.5);
+            child.rotation.y = t * 1.4 + k;
           }
           if (child.name === "vow") {
             const k = child.userData.index;
@@ -2756,7 +3177,7 @@ const Reveal = (() => {
       /* Whichever ritual owns the middle of the screen owns the glass stage.
          Deciding it from the geometry each frame is immune to the order
          scroll callbacks happen to fire in, including big jumps and deep links. */
-      const rituals = $$(".ritual");
+      const rituals = $$("[data-scene]");
       if (rituals.length && typeof GlassWorld !== "undefined") {
         let current = null, queued = false;
 

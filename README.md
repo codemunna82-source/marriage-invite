@@ -181,6 +181,17 @@ cleanly, it is worth crossfading its tail over its head the same way.
 - Venue card with a Google Maps button, and Travel & Stay cards
 - RSVP that composes a WhatsApp message — no backend, no data collected
 
+**The invocation**
+The invitation opens, as it should, with a shrine: Ganesha and Lakshmi carved
+as translucent crystal murtis on lotus bases, under a temple arch hung with
+lamps and flowers, diyas burning at their feet, beneath *|| श्री गणेशाय नमः ||*
+and the Vakratunda shloka, closing on *शुभ विवाह*. Both murtis are faceless by
+intent — a jewelled glass murti reads as devotional where a modelled face
+would read as a toy. Ganesha carries the trunk, the single tusk, the wide
+ears, the mukut and four arms with a modak; Lakshmi sits on her lotus with
+lotuses raised in two hands and coins falling from a third. They float and
+breathe gently rather than spin, and their lamps sway.
+
 **Floating glass doodles**
 Nine wedding rituals — Haldi, Mehndi, Sangeet, Baraat, Jaimala, Mandap, Saat
 Phere, Vidaai, Reception — each raise their own arrangement of translucent
