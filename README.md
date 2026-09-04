@@ -21,7 +21,7 @@ bundler. Three.js and GSAP load from a CDN. Drop it on Vercel and it is live.
 ├── README.md
 └── assets/
     ├── images/         gallery placeholders + og-image.png
-    ├── music/          wedding.mp3 (an original instrumental, ready to replace)
+    ├── music/          wedding.mp3 (bhajan loop) + invocation.mp3 (shankh)
     └── icons/          favicon, apple touch icon, webmanifest
 ```
 
@@ -71,6 +71,7 @@ const weddingData = {
 | Dress code colours | `dressCode` — one entry per event, with any number of hex colours |
 | Blessings in the 3D carousel | `blessings` — add or remove lines freely |
 | Travel & stay cards | `travel` — title and body per card |
+| The music | `music`, and `invocation` (set to `""` to skip the conch) |
 
 Two things live in `index.html` because search engines and WhatsApp previews
 read them before JavaScript runs: the `<title>`/`<meta>` block and the
@@ -113,26 +114,37 @@ link is shared.
 
 ## The music
 
-`assets/music/wedding.mp3` is an original instrumental written for this
-invitation — shehnai and bansuri over a tanpura drone with a soft keherwa on the
-tabla, in raag Bhoop. It is 48 seconds and loops seamlessly. Nothing is
-licensed from anyone, so it is yours to keep, edit or throw away.
+`assets/music/wedding.mp3` is an original **Ganesh-vandana / aarti-style
+bhajan** written and synthesised for this invitation: harmonium carrying the
+tune the way it does at every aarti, bansuri doubling it an octave up, a
+dholak keherwa with manjira on the beat, temple bells at the head of each
+phrase, and a tanpura underneath. Bilawal scale, 96 BPM, 40 seconds, loops
+seamlessly.
+
+`assets/music/invocation.mp3` is a **shankh** — the conch blown once, with
+temple bells and a run of manjira — and it plays a single time, timed to the
+doors opening under *|| श्री गणेशाय नमः ||*. It never repeats, not even when
+the ♪ button is toggled off and back on.
+
+Both were composed from scratch (oscillators, envelopes and a reverb, no
+samples), so there is no licensing attached to either. A commercial Bollywood
+or film recording could not be shipped here — those are licensed works, and
+putting one on a public link is the site owner's exposure, not the CDN's.
 
 **Music is on by default.** It never autoplays cold — it starts the moment the
 visitor taps **ENTER WEDDING**, which is the user gesture mobile browsers
 require — and the floating **♪** button turns it off and on. The choice is
 remembered in `localStorage`, so a guest who mutes it stays muted next visit.
 
-The track is loaded through the Web Audio API so the loop has no gap at the
-seam; if that is unavailable (or the page is opened straight off the
-filesystem) it falls back to the plain `<audio>` element. If the file is
-missing entirely the button simply stays on *OFF* and nothing breaks.
+The loop is loaded through the Web Audio API so it has no gap at the seam; if
+that is unavailable (or the page is opened straight off the filesystem) it
+falls back to the plain `<audio>` element. If a file is missing the button
+simply stays on *OFF* and nothing breaks.
 
-To use your own: drop it in as `assets/music/wedding.mp3`, or point
-`weddingData.music` at a different name. Keep it under a couple of megabytes,
-and use music you have the right to use.
-
----
+**To use a song you have the rights to:** drop it in as
+`assets/music/wedding.mp3`, or point `weddingData.music` at a different name.
+Set `weddingData.invocation` to `""` to skip the conch. Keep the loop under a
+couple of megabytes so the invitation stays quick on mobile data.
 
 ## Features
 

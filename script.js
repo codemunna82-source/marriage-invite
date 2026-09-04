@@ -41,6 +41,7 @@ const weddingData = {
 
   /* --- Music --- */
   music: "assets/music/wedding.mp3",
+  invocation: "assets/music/invocation.mp3",   // shankh + bells, played once as the doors open
 
   /* --- Story --- */
   storyQuote: "Two hearts, one beautiful journey, and a lifetime of memories waiting to be created.",
@@ -446,6 +447,23 @@ const Music = (() => {
     gain.gain.linearRampToValueAtTime(to, t + secs);
   };
 
+  /* the conch, once, over the opening doors — the bhajan swells in behind it */
+  async function invoke() {
+    if (!weddingData.invocation || !ac) return;
+    try {
+      const res = await fetch(weddingData.invocation);
+      if (!res.ok) return;
+      const buf = await ac.decodeAudioData(await res.arrayBuffer());
+      const g = ac.createGain();
+      g.gain.value = 0.8;
+      g.connect(ac.destination);
+      const one = ac.createBufferSource();
+      one.buffer = buf;
+      one.connect(g);
+      one.start(0);
+    } catch (e) { /* a missing invocation must never hold up the music */ }
+  }
+
   /* Web Audio loops the track with no gap at the seam; the <audio> element cannot */
   async function playWebAudio() {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -453,7 +471,8 @@ const Music = (() => {
     if (!ac) ac = new AC();
     if (ac.state === "suspended") await ac.resume();
 
-    if (!src) {
+    const first = !src;
+    if (first) {
       if (loading) return true;
       loading = true;
       const res = await fetch(weddingData.music);
@@ -468,8 +487,10 @@ const Music = (() => {
       src.connect(gain);
       src.start(0);
       loading = false;
+      invoke();
     }
-    ramp(VOL, 2.4);
+    /* the first fade is slow so the shankh is heard on its own */
+    ramp(VOL, first ? 4.5 : 1.2);
     return true;
   }
 
