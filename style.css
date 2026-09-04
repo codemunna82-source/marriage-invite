@@ -1042,30 +1042,7 @@ body.is-entered .main { visibility: visible; }
 .tilt.is-tilting::before, .event-card.is-tilting::before,
 .venue-card.is-tilting::before, .count-card.is-tilting::before { opacity: 1; }
 
-/* ---------- 7. LIGHTBOX & CONTROLS ---------- */
-.music-btn {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
-  z-index: 150;
-  display: inline-flex; align-items: center; gap: 8px;
-  min-height: 46px; padding: 0 18px;
-  border: 1px solid var(--line-gold);
-  border-radius: 999px;
-  background: rgba(27, 2, 9, 0.78);
-  color: var(--gold-200);
-  font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
-  transition: border-color 0.3s var(--ease), color 0.3s var(--ease), transform 0.3s var(--ease);
-}
-.music-btn:hover { border-color: var(--gold-400); transform: translateY(-2px); }
-.music-btn__icon { font-size: 1rem; }
-.music-btn.is-on { border-color: rgba(217, 182, 90, 0.66); color: var(--gold-200); }
-.music-btn.is-on .music-btn__icon { animation: pulse 1.9s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: 0.6; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.12); } }
-
+/* ---------- 7. LIGHTBOX ---------- */
 .lightbox {
   position: fixed; inset: 0; z-index: 300;
   display: grid; place-items: center;

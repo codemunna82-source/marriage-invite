@@ -131,12 +131,12 @@ temple bells and a run of manjira, timed to the doors opening under
 file is still there, so to bring it back set
 `weddingData.invocation = "assets/music/invocation.mp3"`.
 
-**Music is on by default.** It never autoplays cold — it starts the moment the
+**Music simply plays.** It never autoplays cold — it starts the moment the
 visitor taps **ENTER WEDDING**, which is the user gesture mobile browsers
-require — and the floating **♪** button turns it off and on. The choice is
-remembered in `localStorage`, so a guest who mutes it stays muted next visit.
-The first fade-in is deliberately slow (4.5s) so the conch is heard on its own
-before the music rises behind it.
+require — and fades in over 4.5 seconds. There is no on/off control on the
+page by request, so a guest cannot mute it; it does stop when the tab is
+hidden and resume when they come back. If you ever want the toggle again, ask
+— it was a small floating button in the corner.
 
 The loop is loaded through the Web Audio API so it has no gap at the seam; if
 that is unavailable (or the page is opened straight off the filesystem) it

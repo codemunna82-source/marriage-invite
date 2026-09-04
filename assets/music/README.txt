@@ -30,4 +30,5 @@ mobile data. If your track does not end where it begins, crossfade its tail
 over its head or the loop will tick every time round.
 
 The site never autoplays: the track starts only after the visitor taps
-"ENTER WEDDING", and the floating music button toggles it at any time.
+"ENTER WEDDING", fades in over 4.5 seconds, and pauses whenever the tab is
+hidden. There is no on/off button on the page.

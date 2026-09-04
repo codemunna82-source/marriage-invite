@@ -9,7 +9,7 @@
    4.  Countdown
    5.  Gallery + lightbox
    6.  RSVP (WhatsApp)
-   7.  Music
+   7.  Music (no controls — it simply plays)
    8.  Three.js scene (doors, particles, petals)
    9.  CSS fallback doors
    10. Cinematic intro timeline
@@ -431,23 +431,10 @@ function initRsvp() {
    7. MUSIC
    ------------------------------------------------------------ */
 const Music = (() => {
-  const KEY = "wedding-music-pref";
   const VOL = 0.42;
 
-  let audio, btn, label;
-  let ac = null, gain = null, src = null;
-  let wanted = true, on = false, loading = false;
-
-  const store = (v) => { try { localStorage.setItem(KEY, v ? "on" : "off"); } catch (e) { /* private mode */ } };
-  const read = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
-
-  const paint = (v) => {
-    on = v;
-    if (!btn) return;
-    btn.setAttribute("aria-pressed", String(v));
-    btn.classList.toggle("is-on", v);
-    label.textContent = v ? "ON" : "OFF";
-  };
+  let audio;
+  let ac = null, gain = null, src = null, loading = false;
 
   const ramp = (to, secs) => {
     if (!gain) return;
@@ -457,7 +444,7 @@ const Music = (() => {
     gain.gain.linearRampToValueAtTime(to, t + secs);
   };
 
-  /* the conch, once, over the opening doors — the bhajan swells in behind it */
+  /* the conch, once, over the opening doors — the music swells in behind it */
   async function invoke() {
     if (!weddingData.invocation || !ac) return;
     try {
@@ -499,7 +486,7 @@ const Music = (() => {
       loading = false;
       invoke();
     }
-    /* the first fade is slow so the shankh is heard on its own */
+    /* the first fade is slow so anything over the doors is heard on its own */
     ramp(VOL, first ? 4.5 : 1.2);
     return true;
   }
@@ -510,52 +497,21 @@ const Music = (() => {
     audio.volume = 0;
     const p = audio.play();
     return (p && p.then ? p : Promise.resolve()).then(() => {
-      if (env.gsap) gsap.to(audio, { volume: VOL, duration: 2.4 });
+      if (env.gsap) gsap.to(audio, { volume: VOL, duration: 4.5 });
       else audio.volume = VOL;
     });
-  }
-
-  async function play() {
-    try {
-      if (await playWebAudio()) { paint(true); return; }
-      throw new Error("no web audio");
-    } catch (e) {
-      try { await playElement(); paint(true); }
-      catch (err) { paint(false); }          /* no file yet, or the browser refused */
-    }
-  }
-
-  function pause() {
-    if (src && ac) {
-      ramp(0, 0.6);
-      setTimeout(() => { if (!on && ac && ac.state === "running") ac.suspend(); }, 700);
-    }
-    if (audio && !audio.paused) {
-      if (env.gsap) gsap.to(audio, { volume: 0, duration: 0.6, onComplete: () => audio.pause() });
-      else audio.pause();
-    }
-    paint(false);
   }
 
   return {
     init() {
       audio = $("#bg-music");
-      btn = $("#music-btn");
-      if (!btn) return;
-      label = $(".music-btn__text", btn);
-      wanted = read() !== "off";        /* music is on unless this guest turned it off */
-      paint(false);
 
-      btn.addEventListener("click", () => {
-        if (on) { wanted = false; store(false); pause(); }
-        else { wanted = true; store(true); play(); }
-      });
-
+      /* nothing should keep playing into a tab nobody is looking at */
       document.addEventListener("visibilitychange", () => {
         if (document.hidden) {
           if (ac && ac.state === "running") ac.suspend();
           if (audio && !audio.paused) audio.pause();
-        } else if (on && wanted) {
+        } else {
           if (ac && ac.state === "suspended") ac.resume();
           else if (audio && audio.paused && audio.currentTime) audio.play().catch(() => {});
         }
@@ -563,10 +519,13 @@ const Music = (() => {
     },
 
     /* called from the ENTER WEDDING gesture, which is what unlocks audio on mobile */
-    start() {
-      if (!btn) return;
-      btn.hidden = false;
-      if (wanted) play();
+    async start() {
+      try {
+        if (await playWebAudio()) return;
+        throw new Error("no web audio");
+      } catch (e) {
+        try { await playElement(); } catch (err) { /* no file yet, or the browser refused */ }
+      }
     }
   };
 })();
